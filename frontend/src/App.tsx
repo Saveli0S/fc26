@@ -161,6 +161,19 @@ function App() {
 		}
 	};
 
+	const handleShutdown = async () => {
+		setLoading(true);
+		try {
+			await api.shutdown();
+			setStatus({ browserInitialized: false, isRunning: false });
+			runningAllTasks.current = false;
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to shutdown');
+		} finally {
+			setLoading(false);
+		}
+	};
+
 	const handleUpdateRepeatCount = async (taskId: string, repeatCount: number) => {
 		try {
 			await api.updateTask(taskId, { repeatCount });
@@ -206,7 +219,16 @@ function App() {
 							</div>
 						</div>
 
-						<div className="flex items-center gap-2">
+						<div className="flex items-center gap-3">
+							{/* Kill Switch */}
+							<button
+								onClick={handleShutdown}
+								disabled={loading}
+								className="px-4 py-2 rounded-lg font-bold text-sm uppercase tracking-wide transition-all bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-600/30 active:scale-95 disabled:opacity-50"
+							>
+								⚡ Kill All
+							</button>
+
 							{/* Connection Status */}
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-900 border border-ea-border">
 								<div

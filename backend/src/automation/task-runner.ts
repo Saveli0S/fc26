@@ -101,9 +101,12 @@ export class TaskRunner {
         return result;
       }
 
-      // Handle complex tasks with separate workflow
+      // Handle complex tasks with separate workflow (no Squad Builder)
       if (task.taskType === TaskType.Complex && task.complexConfig) {
         this.log('Using Complex Task workflow (manual card selection)...', 'info');
+
+        // Enter the squad view - click on challenge row if present
+        await this.enterSquadViewForComplexTask();
 
         const complexHandler = new ComplexTaskHandler(this.browserManager, this.log);
         const success = await complexHandler.execute(task.complexConfig);
@@ -293,6 +296,69 @@ export class TaskRunner {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Enter the squad view for complex tasks - click on challenge row or directly into squad
+   * This is needed before ComplexTaskHandler can work with card slots
+   */
+  private async enterSquadViewForComplexTask(): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    this.log('Entering squad view for complex task...');
+    await this.browserManager.sleep(1000);
+
+    // Check if we're already on the squad view (empty card slots visible)
+    const emptySlot = page.locator('div.ut-item-loading.empty, div.item.empty.droppable').first();
+    if (await emptySlot.isVisible({ timeout: 1000 }).catch(() => false)) {
+      this.log('Already on squad view');
+      return;
+    }
+
+    // Try clicking on a challenge row to enter squad view
+    const challengeRowSelectors = [
+      '.ut-sbc-challenge-table-row-view',
+      '[class*="challenge-row"]',
+      '.ut-sbc-set-tile-view',
+      '.sbc-challenge',
+    ];
+
+    for (const selector of challengeRowSelectors) {
+      const row = page.locator(selector).first();
+      if (await row.isVisible({ timeout: 500 }).catch(() => false)) {
+        this.log(`Clicking challenge row (${selector})...`);
+        await row.click();
+        await this.browserManager.sleep(1500);
+
+        // Check if squad view appeared
+        if (await emptySlot.isVisible({ timeout: 2000 }).catch(() => false)) {
+          this.log('Entered squad view');
+          return;
+        }
+      }
+    }
+
+    // Try clicking "Build Challenge" or similar button
+    const buildBtnSelectors = [
+      'button:has-text("Build")',
+      'button:has-text("Start")',
+      '.call-to-action',
+    ];
+
+    for (const selector of buildBtnSelectors) {
+      const btn = page.locator(selector).first();
+      if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
+        const text = await btn.textContent().catch(() => '') || '';
+        if (text.toLowerCase().includes('build') || text.toLowerCase().includes('start')) {
+          this.log(`Clicking "${text.trim()}"...`);
+          await btn.click();
+          await this.browserManager.sleep(1500);
+          return;
+        }
+      }
+    }
+
+    this.log('Could not find challenge row or build button, assuming already on squad view', 'warning');
   }
 
   private async executeRepeat(task: Task, rules: SquadBuilderRules, result: TaskResult, repeatIndex: number, repeatCount: number): Promise<void> {

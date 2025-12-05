@@ -17,14 +17,6 @@
       "taskType": "daily"
     },
     {
-      "id": "daily-common-gold-upgrade",
-      "category": "Upgrades",
-      "cardTitle": "Daily Common Gold Upgrade",
-      "repeatCount": 3,
-      "enabled": true,
-      "taskType": "daily"
-    },
-    {
       "id": "daily-rare-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Rare Gold Upgrade",
@@ -80,15 +72,15 @@
       "enabled": true,
       "taskType": "complex",
       "complexConfig": {
-        "silverCards": {
-          "count": 5,
-          "quality": "Silver",
-          "rarity": "Common",
-          "isPositionDefined": false
-        },
         "bronzeCards": {
           "count": 5,
           "quality": "Bronze",
+          "rarity": "Common",
+          "isPositionDefined": false
+        },
+        "silverCards": {
+          "count": 5,
+          "quality": "Silver",
           "rarity": "Common",
           "isPositionDefined": false
         }

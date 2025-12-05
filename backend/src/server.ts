@@ -232,6 +232,33 @@ app.post('/api/run/stop', (req, res) => {
   }
 });
 
+// Emergency stop - stop all tasks, close browser, AND kill all servers
+app.post('/api/shutdown', async (req, res) => {
+  try {
+    // Stop tasks and close browser first
+    if (taskRunner) {
+      taskRunner.stop();
+      await taskRunner.close();
+      taskRunner = null;
+    }
+
+    // Send response before killing servers
+    res.json({ success: true, message: 'Shutting down all servers...' });
+
+    // Kill all servers after a small delay to let response be sent
+    setTimeout(async () => {
+      const { exec } = await import('child_process');
+      exec('kill $(lsof -ti:3001) 2>/dev/null; pkill -f "npm run dev:backend" 2>/dev/null; pkill -f "npm run dev:frontend" 2>/dev/null', (error) => {
+        if (error) {
+          console.log('Shutdown command completed (some processes may have already been stopped)');
+        }
+      });
+    }, 100);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 // Get runner status
 app.get('/api/status', (req, res) => {
   res.json({

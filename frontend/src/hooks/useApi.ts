@@ -74,4 +74,10 @@ export const api = {
 
   // Status
   getStatus: () => fetchApi<AppStatus>('/status'),
+
+  // Emergency shutdown
+  shutdown: () =>
+    fetchApi<{ success: boolean; message: string }>('/shutdown', {
+      method: 'POST',
+    }),
 };
