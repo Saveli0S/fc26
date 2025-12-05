@@ -1,0 +1,40 @@
+{
+  "dailyTasks": [
+    {
+      "id": "daily-bronze-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Daily Bronze Upgrade",
+      "repeatCount": 1,
+      "enabled": true
+    },
+    {
+      "id": "daily-silver-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Daily Silver Upgrade",
+      "repeatCount": 1,
+      "enabled": true
+    },
+    {
+      "id": "daily-gold-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Daily Gold Upgrade",
+      "repeatCount": 1,
+      "enabled": true
+    },
+    {
+      "id": "silver-upgrade-3x",
+      "category": "Upgrades",
+      "cardTitle": "Silver Upgrade",
+      "repeatCount": 1,
+      "enabled": true
+    }
+  ],
+  "squadBuilderRules": {
+    "untradablesOnly": true,
+    "excludeActiveSquad": true,
+    "ignorePosition": true,
+    "sortBy": "rating-low-to-high",
+    "maxOVR": 85,
+    "preferCommon": true
+  }
+}

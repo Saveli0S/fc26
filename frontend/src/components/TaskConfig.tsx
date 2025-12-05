@@ -1,0 +1,168 @@
+import { useState } from 'react';
+import { Task, SquadBuilderRules } from '../types';
+
+interface TaskConfigProps {
+	rules: SquadBuilderRules;
+	onUpdateRules: (rules: SquadBuilderRules) => void;
+	onAddTask: (task: Task) => void;
+}
+
+export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps) {
+	const [isAddingTask, setIsAddingTask] = useState(false);
+	const [newTask, setNewTask] = useState<Partial<Task>>({
+		category: 'Upgrades',
+		repeatCount: 1,
+		enabled: true,
+	});
+
+	const handleRuleChange = (key: keyof SquadBuilderRules, value: any) => {
+		onUpdateRules({ ...rules, [key]: value });
+	};
+
+	const handleAddTask = () => {
+		if (!newTask.cardTitle) return;
+
+		const task: Task = {
+			id: `task-${Date.now()}`,
+			category: newTask.category || 'Upgrades',
+			cardTitle: newTask.cardTitle,
+			repeatCount: newTask.repeatCount || 1,
+			enabled: true,
+		};
+
+		onAddTask(task);
+		setNewTask({ category: 'Upgrades', repeatCount: 1, enabled: true });
+		setIsAddingTask(false);
+	};
+
+	return (
+		<div className="space-y-6">
+			{/* Squad Builder Rules */}
+			<div className="bg-[#131820] border border-ea-border rounded-lg overflow-hidden">
+				<div className="px-4 py-3 border-b border-ea-border">
+					<h3 className="text-sm font-medium text-gray-300">Squad Builder Rules</h3>
+				</div>
+
+				<div className="p-4 space-y-4">
+					{/* Checkboxes */}
+					<div className="grid grid-cols-2 gap-3">
+						{[
+							{ key: 'untradablesOnly', label: 'Untradeables Only' },
+							{ key: 'excludeActiveSquad', label: 'Exclude Active Squad' },
+							{ key: 'ignorePosition', label: 'Ignore Position' },
+							{ key: 'preferCommon', label: 'Prefer Common' },
+						].map(({ key, label }) => (
+							<label
+								key={key}
+								className="flex items-center gap-2 cursor-pointer group"
+							>
+								<input
+									type="checkbox"
+									checked={rules[key as keyof SquadBuilderRules] as boolean}
+									onChange={(e) => handleRuleChange(key as keyof SquadBuilderRules, e.target.checked)}
+									className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-ea-green focus:ring-ea-green focus:ring-offset-0"
+								/>
+								<span className="text-sm text-gray-400 group-hover:text-gray-300">
+									{label}
+								</span>
+							</label>
+						))}
+					</div>
+
+					{/* Sort By */}
+					<div>
+						<label className="block text-xs text-gray-500 mb-1">Sort By</label>
+						<select
+							value={rules.sortBy}
+							onChange={(e) => handleRuleChange('sortBy', e.target.value)}
+							className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
+						>
+							<option value="rating-low-to-high">Rating: Low to High</option>
+							<option value="rating-high-to-low">Rating: High to Low</option>
+						</select>
+					</div>
+
+					{/* Max OVR */}
+					<div>
+						<label className="block text-xs text-gray-500 mb-1">
+							Max OVR: {rules.maxOVR}
+						</label>
+						<input
+							type="range"
+							min="1"
+							max="99"
+							value={rules.maxOVR}
+							onChange={(e) => handleRuleChange('maxOVR', parseInt(e.target.value))}
+							className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-ea-green"
+						/>
+					</div>
+				</div>
+			</div>
+
+			{/* Add Task */}
+			<div className="bg-[#131820] border border-ea-border rounded-lg overflow-hidden">
+				<div className="px-4 py-3 border-b border-ea-border flex items-center justify-between">
+					<h3 className="text-sm font-medium text-gray-300">Add New Task</h3>
+					<button
+						onClick={() => setIsAddingTask(!isAddingTask)}
+						className="text-ea-green text-sm hover:underline"
+					>
+						{isAddingTask ? 'Cancel' : '+ Add'}
+					</button>
+				</div>
+
+				{isAddingTask && (
+					<div className="p-4 space-y-3">
+						<div>
+							<label className="block text-xs text-gray-500 mb-1">Card Title</label>
+							<input
+								type="text"
+								value={newTask.cardTitle || ''}
+								onChange={(e) => setNewTask({ ...newTask, cardTitle: e.target.value })}
+								placeholder="e.g., Daily Bronze Upgrade"
+								className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
+							/>
+						</div>
+
+						<div className="grid grid-cols-2 gap-3">
+							<div>
+								<label className="block text-xs text-gray-500 mb-1">Category</label>
+								<select
+									value={newTask.category}
+									onChange={(e) => setNewTask({ ...newTask, category: e.target.value })}
+									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
+								>
+									<option value="Upgrades">Upgrades</option>
+									<option value="Challenges">Challenges</option>
+									<option value="Players">Players</option>
+									<option value="Icons">Icons</option>
+									<option value="Foundations">Foundations</option>
+								</select>
+							</div>
+
+							<div>
+								<label className="block text-xs text-gray-500 mb-1">Repeat Count</label>
+								<input
+									type="number"
+									min="1"
+									max="99"
+									value={newTask.repeatCount}
+									onChange={(e) => setNewTask({ ...newTask, repeatCount: parseInt(e.target.value) })}
+									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
+								/>
+							</div>
+						</div>
+
+						<button
+							onClick={handleAddTask}
+							disabled={!newTask.cardTitle}
+							className="w-full py-2 bg-ea-green text-black font-medium rounded hover:bg-ea-green/90 transition-colors disabled:bg-gray-700 disabled:text-gray-500"
+						>
+							Add Task
+						</button>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
