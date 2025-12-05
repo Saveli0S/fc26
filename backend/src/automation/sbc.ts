@@ -187,11 +187,62 @@ export class SBCNavigator {
   async clickUseSquadBuilder(): Promise<boolean> {
     const page = this.browserManager.getPage();
 
+    // First, check if "Clear Squad" button exists and is enabled - click it to clear any existing squad
+    this.log('Checking for "Clear Squad" button...');
+    let clearedSquad = false;
+
+    try {
+      // Look for Clear Squad button by text
+      const clearBtn = page.getByRole('button', { name: /Clear Squad|Очистить/i }).first();
+
+      if (await clearBtn.isVisible({ timeout: 1500 })) {
+        // Check if NOT disabled (enabled buttons can be clicked)
+        const classAttr = await clearBtn.getAttribute('class') || '';
+        const isDisabled = classAttr.includes('disabled') || await clearBtn.isDisabled().catch(() => false);
+
+        if (!isDisabled) {
+          await clearBtn.click();
+          this.log('Clicked "Clear Squad"', 'success');
+          clearedSquad = true;
+          await this.browserManager.sleep(1000);
+
+          // Handle confirmation popup if appears
+          const confirmBtnSelectors = [
+            'button:has-text("Yes")',
+            'button:has-text("OK")',
+            'button:has-text("Confirm")',
+            'button:has-text("Да")',
+            'button:has-text("ОК")',
+            '.ut-button-group button:first-child',
+          ];
+
+          for (const selector of confirmBtnSelectors) {
+            try {
+              const confirmBtn = page.locator(selector).first();
+              if (await confirmBtn.isVisible({ timeout: 1000 })) {
+                await confirmBtn.click();
+                this.log('Confirmed clear squad popup', 'success');
+                await this.browserManager.sleep(1000);
+                break;
+              }
+            } catch {
+              continue;
+            }
+          }
+        } else {
+          this.log('"Clear Squad" button is disabled (no squad to clear)');
+        }
+      }
+    } catch (e) {
+      this.log('No "Clear Squad" button found or not clickable');
+    }
+
+    // Now click "Use Squad Builder"
     this.log('Looking for "Use Squad Builder" button...');
 
     const buttonSelectors = [
       'button:has-text("Use Squad Builder")',
-      'button:has-text("Использовать конструктор")', // Russian
+      'button:has-text("Использовать конструктор")',
       '.ut-squad-builder-btn',
       '[class*="squad-builder"]',
       'button.call-to-action',

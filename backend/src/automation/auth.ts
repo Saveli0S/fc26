@@ -19,7 +19,7 @@ export class AuthManager {
     const page = this.browserManager.getPage();
 
     this.log('Navigating to EA Web App...');
-    await page.goto(EA_WEB_APP_URL, { waitUntil: 'networkidle', timeout: 60000 });
+    await page.goto(EA_WEB_APP_URL, { waitUntil: 'networkidle', timeout: 6000 });
 
     // Wait for page to load
     await this.browserManager.sleep(3000);

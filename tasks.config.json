@@ -15,9 +15,16 @@
       "enabled": true
     },
     {
-      "id": "daily-gold-upgrade",
+      "id": "daily-common-gold-upgrade",
       "category": "Upgrades",
-      "cardTitle": "Daily Gold Upgrade",
+      "cardTitle": "Daily Common Gold Upgrade",
+      "repeatCount": 1,
+      "enabled": true
+    },
+    {
+      "id": "daily-rare-gold-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Daily Rare Gold Upgrade",
       "repeatCount": 1,
       "enabled": true
     },
@@ -25,6 +32,20 @@
       "id": "silver-upgrade-3x",
       "category": "Upgrades",
       "cardTitle": "Silver Upgrade",
+      "repeatCount": 3,
+      "enabled": true
+    },
+    {
+      "id": "prime-bronze-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Prime Bronze Players Upgrade",
+      "repeatCount": 1,
+      "enabled": true
+    },
+    {
+      "id": "bronze-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Bronze Upgrade",
       "repeatCount": 1,
       "enabled": true
     }

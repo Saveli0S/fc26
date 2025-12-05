@@ -90,263 +90,308 @@ export class SquadBuilder {
   async applyRules(requirements: ChallengeRequirements): Promise<void> {
     const page = this.browserManager.getPage();
 
-    this.log('Applying squad builder rules...');
+    this.log('=== APPLYING SQUAD BUILDER RULES ===', 'info');
+    await this.browserManager.sleep(1500);
 
-    await this.browserManager.sleep(1000);
+    // 1. Apply checkboxes/toggles
+    this.log('Step 1: Setting toggles...', 'info');
+    await this.setToggle('Untradeables Only', this.rules.untradablesOnly);
+    await this.browserManager.sleep(300);
+    await this.setToggle('Exclude Active Squad', this.rules.excludeActiveSquad);
+    await this.browserManager.sleep(300);
+    await this.setToggle('Ignore Position', this.rules.ignorePosition);
+    await this.browserManager.sleep(300);
 
-    // Apply checkboxes
-    await this.setCheckbox('Untradeables Only', this.rules.untradablesOnly);
-    await this.setCheckbox('Exclude Active Squad', this.rules.excludeActiveSquad);
-    await this.setCheckbox('Ignore Position', this.rules.ignorePosition);
+    // 2. Set Sort By dropdown - "Rating Low to High"
+    this.log('Step 2: Setting Sort By to "Rating Low to High"...', 'info');
+    await this.setSortByDropdown();
+    await this.browserManager.sleep(500);
 
-    // Set Sort By dropdown
-    await this.setSortBy();
+    // 3. Set Max OVR using the second input (type="tel" class="ut-number-input-control")
+    this.log(`Step 3: Setting Max OVR to ${this.rules.maxOVR}...`, 'info');
+    await this.setMaxOVRInput(this.rules.maxOVR);
+    await this.browserManager.sleep(500);
 
-    // Set Max OVR
-    await this.setMaxOVR();
-
-    // Set Quality based on requirements
+    // 4. Set Quality based on requirements
     const quality = requirements.quality || 'Any';
-    await this.setQuality(quality);
+    this.log(`Step 4: Setting Quality to "${quality}"...`, 'info');
+    await this.setQualityDropdown(quality);
+    await this.browserManager.sleep(500);
 
-    // Set Rarity based on requirements
-    let rarity: 'Common' | 'Rare' | 'Any' = 'Any';
-    if (requirements.minRare && requirements.minRare > 0) {
+    // 5. Set Rarity - Rare if requirements mention rare, otherwise Common
+    let rarity: string = 'Common'; // Default to Common
+    if (requirements.rarity === 'Rare' || (requirements.minRare && requirements.minRare > 0)) {
       rarity = 'Rare';
-    } else if (this.rules.preferCommon) {
-      rarity = 'Common';
     }
-    await this.setRarity(rarity);
+    this.log(`Step 5: Setting Rarity to "${rarity}"...`, 'info');
+    await this.setRarityDropdown(rarity);
+    await this.browserManager.sleep(500);
 
-    this.log('Rules applied', 'success');
+    this.log('=== ALL RULES APPLIED ===', 'success');
+
+    // DEBUG PAUSE - remove after testing
+    this.log('Pausing 6s for verification - check side panel...', 'warning');
+    await this.browserManager.sleep(6000);
   }
 
-  private async setCheckbox(label: string, checked: boolean): Promise<void> {
+  private async setToggle(label: string, shouldBeOn: boolean): Promise<void> {
     const page = this.browserManager.getPage();
 
     try {
-      // Find checkbox by label
-      const checkboxSelectors = [
-        `label:has-text("${label}") input[type="checkbox"]`,
-        `.ut-toggle-cell-view:has-text("${label}")`,
-        `[class*="toggle"]:has-text("${label}")`,
-        `input[aria-label*="${label}"]`,
-      ];
+      // Find toggle by looking for the label text, then find the toggle control
+      const toggleRow = page.locator(`.ut-toggle-cell-view, [class*="toggle-cell"]`).filter({ hasText: label }).first();
 
-      for (const selector of checkboxSelectors) {
-        try {
-          const element = page.locator(selector).first();
-          if (await element.isVisible()) {
-            const isChecked = await element.isChecked?.() || false;
-            if (isChecked !== checked) {
-              await element.click();
-              this.log(`Set "${label}" to ${checked}`);
-            }
-            return;
+      if (await toggleRow.isVisible({ timeout: 2000 })) {
+        // Check current state by looking at the toggle's class or aria-checked
+        const toggleBtn = toggleRow.locator('.ut-toggle-control, [class*="toggle-control"], [role="switch"]').first();
+
+        if (await toggleBtn.isVisible()) {
+          const isCurrentlyOn = await toggleBtn.evaluate((el) => {
+            return el.classList.contains('is-checked') ||
+                   el.classList.contains('toggled') ||
+                   el.getAttribute('aria-checked') === 'true' ||
+                   el.classList.contains('ut-toggle-control--checked');
+          });
+
+          if (isCurrentlyOn !== shouldBeOn) {
+            await toggleBtn.click();
+            this.log(`  ✓ Set "${label}" = ${shouldBeOn}`, 'success');
+          } else {
+            this.log(`  - "${label}" already ${shouldBeOn ? 'ON' : 'OFF'}`);
           }
-        } catch {
-          continue;
+          return;
         }
       }
 
-      // Try clicking the toggle container
-      const toggleContainer = page.locator(`text="${label}"`).first();
-      if (await toggleContainer.isVisible()) {
-        const parent = toggleContainer.locator('..').first();
-        const toggle = parent.locator('.ut-toggle-control, [class*="toggle"]').first();
-        if (await toggle.isVisible()) {
-          await toggle.click();
-          this.log(`Toggled "${label}"`);
-        }
+      // Fallback: try clicking any element with the label
+      const labelEl = page.getByText(label, { exact: false }).first();
+      if (await labelEl.isVisible({ timeout: 1000 })) {
+        await labelEl.click();
+        this.log(`  ✓ Clicked "${label}"`, 'success');
+        return;
       }
+
+      this.log(`  ✗ Could not find toggle: "${label}"`, 'warning');
     } catch (error) {
-      this.log(`Could not set checkbox "${label}": ${error}`, 'warning');
+      this.log(`  ✗ Error setting "${label}": ${error}`, 'error');
     }
   }
 
-  private async setSortBy(): Promise<void> {
+  private async setMaxOVRInput(value: number): Promise<void> {
     const page = this.browserManager.getPage();
 
     try {
-      this.log('Setting Sort By...');
+      // EA Web App uses input type="tel" class="ut-number-input-control"
+      // There are 2 inputs: Min OVR (first) and Max OVR (second)
+      const ovrInputs = page.locator('input.ut-number-input-control[type="tel"]');
+      const count = await ovrInputs.count();
 
-      // Find Sort By dropdown
-      const dropdownSelectors = [
-        '.ut-drop-down-control:has-text("Sort By")',
-        'select[name*="sort"]',
-        '[class*="sort"] select',
-        '.ut-search-filter-control--sort-by',
-      ];
+      this.log(`  Found ${count} OVR inputs`);
 
-      for (const selector of dropdownSelectors) {
-        try {
-          const dropdown = page.locator(selector).first();
-          if (await dropdown.isVisible()) {
-            await dropdown.click();
-            await this.browserManager.sleep(500);
-
-            // Select "Rating Low to High"
-            const optionText = this.rules.sortBy === 'rating-low-to-high'
-              ? ['Rating Low to High', 'Рейтинг (по возраст.)', 'Low to High']
-              : ['Rating High to Low', 'Рейтинг (по убыв.)', 'High to Low'];
-
-            for (const text of optionText) {
-              const option = page.locator(`text="${text}"`).first();
-              if (await option.isVisible()) {
-                await option.click();
-                this.log(`Set Sort By to "${text}"`);
-                return;
-              }
-            }
-          }
-        } catch {
-          continue;
-        }
+      if (count >= 2) {
+        // Second input is Max OVR
+        const maxInput = ovrInputs.nth(1);
+        await maxInput.click();
+        await maxInput.clear();
+        await maxInput.fill(value.toString());
+        await maxInput.press('Tab'); // Confirm input
+        this.log(`  ✓ Set Max OVR = ${value}`, 'success');
+        return;
+      } else if (count === 1) {
+        // Only one input, assume it's Max OVR
+        const input = ovrInputs.first();
+        await input.click();
+        await input.clear();
+        await input.fill(value.toString());
+        await input.press('Tab');
+        this.log(`  ✓ Set OVR = ${value}`, 'success');
+        return;
       }
 
-      // Try using select element directly
-      const selectElement = page.locator('select').first();
-      if (await selectElement.isVisible()) {
-        await selectElement.selectOption({ index: this.rules.sortBy === 'rating-low-to-high' ? 0 : 1 });
-      }
+      this.log(`  ✗ Could not find OVR inputs`, 'warning');
     } catch (error) {
-      this.log(`Could not set Sort By: ${error}`, 'warning');
+      this.log(`  ✗ Error setting Max OVR: ${error}`, 'error');
     }
   }
 
-  private async setMaxOVR(): Promise<void> {
+  private async setSortByDropdown(): Promise<void> {
     const page = this.browserManager.getPage();
 
     try {
-      this.log(`Setting Max OVR to ${this.rules.maxOVR}...`);
+      // Find all dropdowns and look for Sort By
+      const dropdowns = page.locator('.ut-drop-down-control');
+      const count = await dropdowns.count();
 
-      // Find Max OVR input or slider
-      const ovrSelectors = [
-        'input[name*="ovr"]',
-        'input[name*="rating"]',
-        '.ut-numeric-input-control input',
-        '[class*="ovr"] input',
-        '[class*="rating"] input',
-      ];
+      this.log(`  Found ${count} dropdowns`);
 
-      for (const selector of ovrSelectors) {
-        try {
-          const input = page.locator(selector).last();
-          if (await input.isVisible()) {
-            await input.fill(this.rules.maxOVR.toString());
-            this.log(`Set Max OVR to ${this.rules.maxOVR}`);
-            return;
-          }
-        } catch {
-          continue;
-        }
-      }
+      // Sort By is usually the first dropdown
+      for (let i = 0; i < count; i++) {
+        const dropdown = dropdowns.nth(i);
+        const text = await dropdown.textContent() || '';
 
-      // Try looking for labeled input
-      const labeledInput = page.locator('label:has-text("Max") input, label:has-text("Макс") input').first();
-      if (await labeledInput.isVisible()) {
-        await labeledInput.fill(this.rules.maxOVR.toString());
-        this.log(`Set Max OVR to ${this.rules.maxOVR}`);
-      }
-    } catch (error) {
-      this.log(`Could not set Max OVR: ${error}`, 'warning');
-    }
-  }
+        if (text.includes('Sort') || text.includes('Rating') || text.includes('Low') || text.includes('High')) {
+          await dropdown.click();
+          await this.browserManager.sleep(300);
 
-  private async setQuality(quality: string): Promise<void> {
-    const page = this.browserManager.getPage();
-
-    try {
-      this.log(`Setting Quality to ${quality}...`);
-
-      // Find Quality dropdown
-      const dropdownSelectors = [
-        '.ut-drop-down-control:has-text("Quality")',
-        '.ut-drop-down-control:has-text("Качество")',
-        'select[name*="quality"]',
-        '[class*="quality"] select',
-      ];
-
-      for (const selector of dropdownSelectors) {
-        try {
-          const dropdown = page.locator(selector).first();
-          if (await dropdown.isVisible()) {
-            await dropdown.click();
-            await this.browserManager.sleep(500);
-
-            // Quality mappings (English and Russian)
-            const qualityMap: Record<string, string[]> = {
-              'Bronze': ['Bronze', 'Бронзовый', 'Бронза'],
-              'Silver': ['Silver', 'Серебряный', 'Серебро'],
-              'Gold': ['Gold', 'Золотой', 'Золото'],
-              'Any': ['Any', 'Любой', 'Все'],
-            };
-
-            const options = qualityMap[quality] || [quality];
-            for (const text of options) {
-              const option = page.locator(`text="${text}"`).first();
-              if (await option.isVisible()) {
-                await option.click();
-                this.log(`Set Quality to "${text}"`);
-                await this.browserManager.sleep(500);
-                return;
-              }
+          // Look for "Rating Low to High" option
+          const options = ['Rating Low to High', 'Low to High', 'Рейтинг'];
+          for (const optText of options) {
+            const option = page.locator(`li, [class*="option"]`).filter({ hasText: optText }).first();
+            if (await option.isVisible({ timeout: 500 })) {
+              await option.click();
+              this.log(`  ✓ Set Sort By = "${optText}"`, 'success');
+              return;
             }
           }
-        } catch {
-          continue;
+
+          await page.keyboard.press('Escape');
         }
       }
+
+      this.log(`  ✗ Could not find Sort By dropdown`, 'warning');
     } catch (error) {
-      this.log(`Could not set Quality: ${error}`, 'warning');
+      this.log(`  ✗ Error setting Sort By: ${error}`, 'error');
     }
   }
 
-  private async setRarity(rarity: string): Promise<void> {
+  private async setQualityDropdown(quality: string): Promise<void> {
     const page = this.browserManager.getPage();
 
     try {
-      this.log(`Setting Rarity to ${rarity}...`);
+      // Based on DOM: div.inline-list-select.ut-search-filter-control with img src containing "/level/"
+      // Quality dropdown has image: images/SearchFilters/level/any.png
+      const qualityDropdown = page.locator('.inline-list-select.ut-search-filter-control').filter({
+        has: page.locator('img[src*="/level/"]')
+      }).first();
 
-      // Find Rarity dropdown (usually second dropdown)
-      const dropdownSelectors = [
-        '.ut-drop-down-control:has-text("Rarity")',
-        '.ut-drop-down-control:has-text("Редкость")',
-        'select[name*="rarity"]',
-        '[class*="rarity"] select',
-      ];
+      if (await qualityDropdown.isVisible({ timeout: 2000 })) {
+        this.log(`  Found Quality dropdown (by /level/ image)`);
+        await this.selectInlineListOption(qualityDropdown, quality, {
+          'Bronze': ['bronze'],
+          'Silver': ['silver'],
+          'Gold': ['gold'],
+          'Any': ['any'],
+        });
+        return;
+      }
 
-      for (const selector of dropdownSelectors) {
-        try {
-          const dropdown = page.locator(selector).first();
-          if (await dropdown.isVisible()) {
-            await dropdown.click();
-            await this.browserManager.sleep(500);
+      // Fallback: try all inline-list-select elements
+      const allSelects = page.locator('.inline-list-select.ut-search-filter-control');
+      const count = await allSelects.count();
+      this.log(`  Fallback: Found ${count} inline-list-select elements`);
 
-            // Rarity mappings
-            const rarityMap: Record<string, string[]> = {
-              'Common': ['Common', 'Обычный'],
-              'Rare': ['Rare', 'Редкий'],
-              'Any': ['Any', 'Любой', 'Все'],
-            };
+      // Quality is typically the first one (index 0)
+      if (count >= 1) {
+        this.log(`  Using index 0 for Quality`);
+        await this.selectInlineListOption(allSelects.nth(0), quality, {
+          'Bronze': ['bronze'],
+          'Silver': ['silver'],
+          'Gold': ['gold'],
+          'Any': ['any'],
+        });
+        return;
+      }
 
-            const options = rarityMap[rarity] || [rarity];
-            for (const text of options) {
-              const option = page.locator(`text="${text}"`).first();
-              if (await option.isVisible()) {
-                await option.click();
-                this.log(`Set Rarity to "${text}"`);
-                await this.browserManager.sleep(500);
-                return;
-              }
-            }
-          }
-        } catch {
-          continue;
+      this.log(`  ✗ Could not find Quality dropdown`, 'warning');
+    } catch (error) {
+      this.log(`  ✗ Error setting Quality: ${error}`, 'error');
+    }
+  }
+
+  private async setRarityDropdown(rarity: string): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    try {
+      // Based on DOM: div.inline-list-select.ut-search-filter-control with img src containing "/rarity/"
+      // Rarity dropdown has image: images/SearchFilters/rarity/any.png
+      const rarityDropdown = page.locator('.inline-list-select.ut-search-filter-control').filter({
+        has: page.locator('img[src*="/rarity/"]')
+      }).first();
+
+      if (await rarityDropdown.isVisible({ timeout: 2000 })) {
+        this.log(`  Found Rarity dropdown (by /rarity/ image)`);
+        await this.selectInlineListOption(rarityDropdown, rarity, {
+          'Common': ['common'],
+          'Rare': ['rare'],
+          'Any': ['any'],
+        });
+        return;
+      }
+
+      // Fallback: try all inline-list-select elements
+      const allSelects = page.locator('.inline-list-select.ut-search-filter-control');
+      const count = await allSelects.count();
+      this.log(`  Fallback: Found ${count} inline-list-select elements`);
+
+      // Rarity is typically the second one (index 1)
+      if (count >= 2) {
+        this.log(`  Using index 1 for Rarity`);
+        await this.selectInlineListOption(allSelects.nth(1), rarity, {
+          'Common': ['common'],
+          'Rare': ['rare'],
+          'Any': ['any'],
+        });
+        return;
+      }
+
+      this.log(`  ✗ Could not find Rarity dropdown`, 'warning');
+    } catch (error) {
+      this.log(`  ✗ Error setting Rarity: ${error}`, 'error');
+    }
+  }
+
+  private async selectInlineListOption(dropdown: any, value: string, valueMap: Record<string, string[]>): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    try {
+      // Click the row or container to open dropdown (not the hidden button)
+      const clickTarget = dropdown.locator('.ut-search-filter-control--row, .inline-container, div').first();
+      await clickTarget.click({ force: true });
+      await this.browserManager.sleep(400);
+
+      const searchTerms = valueMap[value] || [value.toLowerCase()];
+
+      // Index mapping: Any=0, Bronze/Common=1, Silver/Rare=2, Gold=3
+      const indexMap: Record<string, number> = {
+        'Any': 0,
+        'Bronze': 1, 'Common': 1,
+        'Silver': 2, 'Rare': 2,
+        'Gold': 3,
+      };
+
+      // Get all list items quickly
+      const listItems = page.locator('ul.inline-list li, ul li');
+      const itemCount = await listItems.count();
+      this.log(`  Found ${itemCount} options`);
+
+      // Try by index first (fastest)
+      const targetIndex = indexMap[value];
+      if (targetIndex !== undefined && itemCount > targetIndex) {
+        const targetItem = listItems.nth(targetIndex);
+        await targetItem.click({ force: true, timeout: 2000 });
+        this.log(`  ✓ Selected "${value}" (index ${targetIndex})`, 'success');
+        return;
+      }
+
+      // Fallback: try by image src
+      for (const term of searchTerms) {
+        const optionByImg = page.locator(`li`).filter({
+          has: page.locator(`img[src*="/${term}"]`)
+        }).first();
+
+        if (await optionByImg.count() > 0) {
+          await optionByImg.click({ force: true, timeout: 2000 });
+          this.log(`  ✓ Selected "${value}" (by image)`, 'success');
+          return;
         }
       }
+
+      // Close dropdown if nothing selected
+      await page.keyboard.press('Escape');
+      this.log(`  ✗ Could not find option "${value}"`, 'warning');
     } catch (error) {
-      this.log(`Could not set Rarity: ${error}`, 'warning');
+      this.log(`  ✗ Error selecting option: ${error}`, 'error');
+      await page.keyboard.press('Escape').catch(() => {});
     }
   }
 
@@ -455,7 +500,7 @@ export class SquadBuilder {
         this.log('Adjusting rules for next attempt...');
         // Try with different rarity
         if (requirements.minRare) {
-          await this.setRarity('Rare');
+          await this.setRarityDropdown('Rare');
         }
       }
     }

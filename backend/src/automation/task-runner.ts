@@ -83,29 +83,20 @@ export class TaskRunner {
 
         this.log(`=== Repeat ${i + 1}/${task.repeatCount} ===`, 'info');
 
-        // For repeats after the first one, the card should still be open
-        // Just need to click "Use Squad Builder" again after rewards
+        // For repeats after the first one, we're already on SBC page (navigated after claiming rewards)
         if (i > 0) {
           if (this.shouldStop) return result;
 
           this.log('Starting next repeat...');
-          await this.browserManager.sleep(1500);
 
-          // Check if we're still on the card page, if not navigate back
-          const page = this.browserManager.getPage();
-          const onCardPage = await page.locator('button:has-text("Use Squad Builder"), button:has-text("Использовать")').first().isVisible({ timeout: 2000 }).catch(() => false);
+          // Select category and find card (we're already on SBC page)
+          await this.sbcNavigator.selectCategory(task.category);
+          if (this.shouldStop) return result;
 
-          if (!onCardPage) {
-            this.log('Re-navigating to card...');
-            await this.sbcNavigator.navigateToSBC();
-            if (this.shouldStop) return result;
-            await this.sbcNavigator.selectCategory(task.category);
-            if (this.shouldStop) return result;
-            const cardFound = await this.sbcNavigator.findAndClickCard(task.cardTitle);
-            if (!cardFound) {
-              this.log('Could not find card for repeat', 'error');
-              break;
-            }
+          const cardFound = await this.sbcNavigator.findAndClickCard(task.cardTitle);
+          if (!cardFound) {
+            this.log('Could not find card for repeat', 'error');
+            break;
           }
         }
 
@@ -171,6 +162,11 @@ export class TaskRunner {
 
         result.completedRepeats++;
         this.log(`Completed ${result.completedRepeats}/${task.repeatCount}`, 'success');
+
+        // Always navigate back to SBC page after each repeat
+        this.log('Navigating back to SBC page...');
+        await this.sbcNavigator.navigateToSBC();
+        await this.browserManager.sleep(1000);
       }
 
       result.status = result.completedRepeats === task.repeatCount ? 'completed' : 'failed';
@@ -179,6 +175,13 @@ export class TaskRunner {
       result.status = 'failed';
       result.error = error instanceof Error ? error.message : String(error);
       this.log(`Task failed: ${result.error}`, 'error');
+    }
+
+    // Always navigate to SBC page at end of task
+    try {
+      await this.sbcNavigator.navigateToSBC();
+    } catch {
+      // Ignore navigation errors
     }
 
     return result;
