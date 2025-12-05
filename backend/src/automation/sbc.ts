@@ -108,46 +108,35 @@ export class SBCNavigator {
   async findAndClickCard(cardTitle: string): Promise<boolean> {
     const page = this.browserManager.getPage();
 
-    this.log(`Looking for card: ${cardTitle}...`);
+    this.log(`Looking for card: "${cardTitle}"...`);
 
     // Scroll through the SBC list to find the card
     const maxScrollAttempts = 10;
 
     for (let i = 0; i < maxScrollAttempts; i++) {
-      // Try to find the card
-      const cardSelectors = [
-        `.ut-sbc-set-tile-view:has-text("${cardTitle}")`,
-        `.ut-sbc-challenge-table-row-view:has-text("${cardTitle}")`,
-        `[class*="sbc"]:has-text("${cardTitle}")`,
-        `.tile:has-text("${cardTitle}")`,
-      ];
+      // Find all card titles (h1.tileTitle)
+      const titleElements = page.locator('h1.tileTitle, .tileTitle, .ut-sbc-set-tile-view--title');
+      const count = await titleElements.count();
+      this.log(`  Found ${count} card titles`);
 
-      for (const selector of cardSelectors) {
-        try {
-          const element = page.locator(selector).first();
-          if (await element.isVisible()) {
-            await element.click();
-            this.log(`Clicked card: ${cardTitle}`, 'success');
-            await this.browserManager.sleep(1500);
-            return true;
+      for (let j = 0; j < count; j++) {
+        const titleEl = titleElements.nth(j);
+        const titleText = await titleEl.textContent().catch(() => '') || '';
+
+        // Exact match
+        if (titleText.trim() === cardTitle) {
+          this.log(`  Found exact match: "${titleText.trim()}"`);
+          // Click the parent card tile
+          const parentCard = titleEl.locator('xpath=ancestor::div[contains(@class, "ut-sbc-set-tile-view")]').first();
+          if (await parentCard.isVisible().catch(() => false)) {
+            await parentCard.click();
+          } else {
+            await titleEl.click();
           }
-        } catch {
-          continue;
-        }
-      }
-
-      // Try finding by text content
-      const textLocator = page.locator(`text="${cardTitle}"`).first();
-      try {
-        if (await textLocator.isVisible()) {
-          // Click the parent card element
-          await textLocator.click();
-          this.log(`Clicked card: ${cardTitle}`, 'success');
+          this.log(`✓ Clicked card: "${cardTitle}"`, 'success');
           await this.browserManager.sleep(1500);
           return true;
         }
-      } catch {
-        // Continue scrolling
       }
 
       // Scroll down to find more cards
@@ -155,7 +144,7 @@ export class SBCNavigator {
       await this.browserManager.sleep(500);
     }
 
-    this.log(`Could not find card: ${cardTitle}`, 'error');
+    this.log(`✗ Could not find card: "${cardTitle}"`, 'error');
     return false;
   }
 
@@ -182,6 +171,63 @@ export class SBCNavigator {
     }
 
     return false;
+  }
+
+  /**
+   * Parse the repeat count from the web page (e.g., "Repeatable: 0")
+   * Returns the number from the page, or null if not found
+   */
+  async getRepeatCountFromPage(): Promise<number | null> {
+    const page = this.browserManager.getPage();
+
+    try {
+      // Look for "Repeatable: X" text - most specific selectors first
+      const repeatableSelectors = [
+        '.ut-squad-building-set-status-label-view.repeat',
+        '.ut-squad-building-set-status-label-view.repeat span.text',
+        '.ut-squad-building-set-status-label-view span.text',
+        '.ut-squad-building-set-status-label-view',
+        '[class*="status-label"]',
+        'span.text:has-text("Repeatable")',
+      ];
+
+      for (const selector of repeatableSelectors) {
+        try {
+          const elements = page.locator(selector);
+          const count = await elements.count();
+
+          for (let i = 0; i < count; i++) {
+            const text = await elements.nth(i).textContent();
+            if (text && text.toLowerCase().includes('repeatable')) {
+              // Match "Repeatable: X" pattern (including 0)
+              const match = text.match(/Repeatable[:\s]*(\d+)/i);
+              if (match) {
+                const repeatCount = parseInt(match[1], 10);
+                this.log(`Found repeat count from page: ${repeatCount} (selector: ${selector})`);
+                return repeatCount;
+              }
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      // Try direct text search on page content
+      const pageContent = await page.content();
+      const match = pageContent.match(/Repeatable[:\s]*(\d+)/i);
+      if (match) {
+        const repeatCount = parseInt(match[1], 10);
+        this.log(`Found repeat count from page content: ${repeatCount}`);
+        return repeatCount;
+      }
+
+    } catch (error) {
+      this.log(`Could not parse repeat count: ${error}`, 'warning');
+    }
+
+    this.log('Could not find repeat count on page', 'warning');
+    return null;
   }
 
   async clickUseSquadBuilder(): Promise<boolean> {

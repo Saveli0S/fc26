@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TaskList } from './components/TaskList';
 import { TaskConfig } from './components/TaskConfig';
 import { StatusLog } from './components/StatusLog';
+import { SessionReport } from './components/SessionReport';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api } from './hooks/useApi';
 import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules } from './types';
@@ -13,6 +14,8 @@ function App() {
 	const [taskResults, setTaskResults] = useState<Map<string, TaskResult>>(new Map());
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [showReport, setShowReport] = useState(false);
+	const runningAllTasks = useRef(false);
 
 	// WebSocket handlers
 	const handleLog = useCallback((entry: LogEntry) => {
@@ -20,8 +23,30 @@ function App() {
 	}, []);
 
 	const handleTaskStatus = useCallback((result: TaskResult) => {
-		setTaskResults((prev) => new Map(prev).set(result.taskId, result));
-	}, []);
+		setTaskResults((prev) => {
+			const newResults = new Map(prev).set(result.taskId, result);
+
+			// Check if all enabled tasks are complete (when running all)
+			if (runningAllTasks.current && config) {
+				const enabledTasks = config.dailyTasks.filter(t => t.enabled);
+				const allDone = enabledTasks.every(task => {
+					const r = newResults.get(task.id);
+					return r && (r.status === 'completed' || r.status === 'failed' || r.status === 'skipped');
+				});
+
+				if (allDone && enabledTasks.length > 0) {
+					// Show report after a short delay
+					setTimeout(() => {
+						setShowReport(true);
+						setStatus(prev => ({ ...prev, isRunning: false }));
+						runningAllTasks.current = false;
+					}, 500);
+				}
+			}
+
+			return newResults;
+		});
+	}, [config]);
 
 	const { connected } = useWebSocket(handleLog, handleTaskStatus);
 
@@ -89,10 +114,21 @@ function App() {
 
 	const handleRunAll = async () => {
 		setError(null);
+		setShowReport(false);
+		// Clear previous results for enabled tasks
+		if (config) {
+			const newResults = new Map(taskResults);
+			config.dailyTasks.filter(t => t.enabled).forEach(task => {
+				newResults.delete(task.id);
+			});
+			setTaskResults(newResults);
+		}
+		runningAllTasks.current = true;
 		try {
 			await api.runAll();
 			setStatus((prev) => ({ ...prev, isRunning: true }));
 		} catch (err) {
+			runningAllTasks.current = false;
 			setError(err instanceof Error ? err.message : 'Failed to run tasks');
 		}
 	};
@@ -122,6 +158,15 @@ function App() {
 			await loadConfig();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update task');
+		}
+	};
+
+	const handleUpdateRepeatCount = async (taskId: string, repeatCount: number) => {
+		try {
+			await api.updateTask(taskId, { repeatCount });
+			await loadConfig();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to update repeat count');
 		}
 	};
 
@@ -198,8 +243,8 @@ function App() {
 						onClick={handleInitBrowser}
 						disabled={loading || status.browserInitialized}
 						className={`px-4 py-2 rounded font-medium text-sm transition-all ${status.browserInitialized
-								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-								: 'bg-ea-blue/10 text-ea-blue border border-ea-blue/30 hover:bg-ea-blue/20'
+							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+							: 'bg-ea-blue/10 text-ea-blue border border-ea-blue/30 hover:bg-ea-blue/20'
 							}`}
 					>
 						{loading ? 'Loading...' : status.browserInitialized ? '✓ Browser Ready' : 'Initialize Browser'}
@@ -209,8 +254,8 @@ function App() {
 						onClick={handleLogin}
 						disabled={loading || !status.browserInitialized}
 						className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized
-								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-								: 'bg-ea-purple/10 text-ea-purple border border-ea-purple/30 hover:bg-ea-purple/20'
+							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+							: 'bg-ea-purple/10 text-ea-purple border border-ea-purple/30 hover:bg-ea-purple/20'
 							}`}
 					>
 						Login to EA
@@ -230,8 +275,8 @@ function App() {
 							onClick={handleRunAll}
 							disabled={!status.browserInitialized}
 							className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized
-									? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-									: 'bg-ea-green text-black hover:bg-ea-green/90 animate-pulse-glow'
+								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+								: 'bg-ea-green text-black hover:bg-ea-green/90 animate-pulse-glow'
 								}`}
 						>
 							▶ Run All Tasks
@@ -242,8 +287,8 @@ function App() {
 						onClick={handleCloseBrowser}
 						disabled={loading || !status.browserInitialized}
 						className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized
-								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-								: 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+							: 'bg-gray-800 text-gray-400 hover:bg-gray-700'
 							}`}
 					>
 						Close Browser
@@ -259,6 +304,7 @@ function App() {
 								tasks={config.dailyTasks}
 								taskResults={taskResults}
 								onToggleTask={handleToggleTask}
+								onUpdateRepeatCount={handleUpdateRepeatCount}
 								onRunTask={handleRunTask}
 								isRunning={status.isRunning}
 								browserReady={status.browserInitialized}
@@ -285,6 +331,15 @@ function App() {
 			<footer className="border-t border-ea-border mt-12 py-6 text-center text-xs text-gray-600">
 				FC26 SBC Automation Tool • Use responsibly
 			</footer>
+
+			{/* Session Report Modal */}
+			{showReport && config && (
+				<SessionReport
+					tasks={config.dailyTasks}
+					taskResults={taskResults}
+					onClose={() => setShowReport(false)}
+				/>
+			)}
 		</div>
 	);
 }

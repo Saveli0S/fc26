@@ -2,12 +2,69 @@ import { z } from 'zod';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
+// Enums - these define valid values
+export const SBCCategory = {
+  All: 'All',
+  Favourites: 'Favourites',
+  Players: 'Players',
+  Upgrades: 'Upgrades',
+  Challenges: 'Challenges',
+  Icons: 'Icons',
+  Foundations: 'Foundations',
+} as const;
+
+export const TaskType = {
+  Daily: 'daily',
+  Optional: 'optional',
+  Complex: 'complex',
+} as const;
+
+// Enums for complex task card requirements
+export const CardQuality = {
+  Bronze: 'Bronze',
+  Silver: 'Silver',
+  Gold: 'Gold',
+} as const;
+
+export const CardRarity = {
+  Common: 'Common',
+  Rare: 'Rare',
+} as const;
+
+export type SBCCategoryType = typeof SBCCategory[keyof typeof SBCCategory];
+export type TaskTypeType = typeof TaskType[keyof typeof TaskType];
+export type CardQualityType = typeof CardQuality[keyof typeof CardQuality];
+export type CardRarityType = typeof CardRarity[keyof typeof CardRarity];
+
+// Complex task card requirement schema
+export const CardRequirementSchema = z.object({
+  count: z.number().min(1).default(1),
+  quality: z.enum(['Bronze', 'Silver', 'Gold']),
+  rarity: z.enum(['Common', 'Rare']),
+  isPositionDefined: z.boolean().default(true),
+});
+
+export const ComplexTaskConfigSchema = z.object({
+  bronzeCards: CardRequirementSchema.optional(),
+  silverCards: CardRequirementSchema.optional(),
+  goldCards: CardRequirementSchema.optional(),
+});
+
+export type CardRequirement = z.infer<typeof CardRequirementSchema>;
+export type ComplexTaskConfig = z.infer<typeof ComplexTaskConfigSchema>;
+
+// Extract enum values for Zod schema
+const sbcCategoryValues = Object.values(SBCCategory) as [string, ...string[]];
+const taskTypeValues = Object.values(TaskType) as [string, ...string[]];
+
 export const TaskSchema = z.object({
   id: z.string(),
-  category: z.enum(['All', 'Favourites', 'Players', 'Upgrades', 'Challenges', 'Icons', 'Foundations']),
+  category: z.enum(sbcCategoryValues),
   cardTitle: z.string(),
   repeatCount: z.number().min(1).default(1),
   enabled: z.boolean().default(true),
+  taskType: z.enum(taskTypeValues).default(TaskType.Daily),
+  complexConfig: ComplexTaskConfigSchema.optional(),
 });
 
 export const SquadBuilderRulesSchema = z.object({
@@ -40,6 +97,7 @@ export function loadConfig(): Config {
           cardTitle: 'Daily Bronze Upgrade',
           repeatCount: 1,
           enabled: true,
+          taskType: 'daily',
         },
       ],
       squadBuilderRules: {

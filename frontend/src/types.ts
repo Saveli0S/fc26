@@ -1,9 +1,30 @@
+// Enums
+export const SBCCategory = {
+  All: 'All',
+  Favourites: 'Favourites',
+  Players: 'Players',
+  Upgrades: 'Upgrades',
+  Challenges: 'Challenges',
+  Icons: 'Icons',
+  Foundations: 'Foundations',
+} as const;
+
+export const TaskType = {
+  Daily: 'daily',
+  Optional: 'optional',
+  Complex: 'complex',
+} as const;
+
+export type SBCCategoryType = typeof SBCCategory[keyof typeof SBCCategory];
+export type TaskTypeType = typeof TaskType[keyof typeof TaskType];
+
 export interface Task {
   id: string;
-  category: string;
+  category: SBCCategoryType;
   cardTitle: string;
   repeatCount: number;
   enabled: boolean;
+  taskType: TaskTypeType;
 }
 
 export interface SquadBuilderRules {

@@ -5,49 +5,72 @@
       "category": "Upgrades",
       "cardTitle": "Daily Bronze Upgrade",
       "repeatCount": 1,
-      "enabled": true
+      "enabled": true,
+      "taskType": "daily"
     },
     {
       "id": "daily-silver-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Silver Upgrade",
       "repeatCount": 1,
-      "enabled": true
+      "enabled": true,
+      "taskType": "daily"
     },
     {
       "id": "daily-common-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Common Gold Upgrade",
-      "repeatCount": 1,
-      "enabled": true
+      "repeatCount": 3,
+      "enabled": true,
+      "taskType": "daily"
     },
     {
       "id": "daily-rare-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Rare Gold Upgrade",
       "repeatCount": 1,
-      "enabled": true
+      "enabled": true,
+      "taskType": "daily"
     },
     {
       "id": "silver-upgrade-3x",
       "category": "Upgrades",
       "cardTitle": "Silver Upgrade",
       "repeatCount": 3,
-      "enabled": true
+      "enabled": true,
+      "taskType": "daily"
     },
     {
       "id": "prime-bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Prime Bronze Players Upgrade",
       "repeatCount": 1,
-      "enabled": true
+      "enabled": true,
+      "taskType": "daily"
     },
     {
       "id": "bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Bronze Upgrade",
       "repeatCount": 1,
-      "enabled": true
+      "enabled": true,
+      "taskType": "daily"
+    },
+    {
+      "id": "gold-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Gold Upgrade",
+      "repeatCount": 1,
+      "enabled": true,
+      "taskType": "complex",
+      "complexConfig": {
+        "goldCards": {
+          "count": 10,
+          "quality": "Gold",
+          "rarity": "Common",
+          "isPositionDefined": false
+        }
+      }
     }
   ],
   "squadBuilderRules": {

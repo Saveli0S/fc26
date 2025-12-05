@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Task, SquadBuilderRules } from '../types';
+import { Task, SquadBuilderRules, SBCCategory, TaskType, SBCCategoryType, TaskTypeType } from '../types';
 
 interface TaskConfigProps {
 	rules: SquadBuilderRules;
@@ -10,9 +10,10 @@ interface TaskConfigProps {
 export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps) {
 	const [isAddingTask, setIsAddingTask] = useState(false);
 	const [newTask, setNewTask] = useState<Partial<Task>>({
-		category: 'Upgrades',
+		category: SBCCategory.Upgrades,
 		repeatCount: 1,
 		enabled: true,
+		taskType: TaskType.Daily,
 	});
 
 	const handleRuleChange = (key: keyof SquadBuilderRules, value: any) => {
@@ -24,14 +25,15 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps)
 
 		const task: Task = {
 			id: `task-${Date.now()}`,
-			category: newTask.category || 'Upgrades',
+			category: newTask.category || SBCCategory.Upgrades,
 			cardTitle: newTask.cardTitle,
 			repeatCount: newTask.repeatCount || 1,
 			enabled: true,
+			taskType: newTask.taskType || TaskType.Daily,
 		};
 
 		onAddTask(task);
-		setNewTask({ category: 'Upgrades', repeatCount: 1, enabled: true });
+		setNewTask({ category: SBCCategory.Upgrades, repeatCount: 1, enabled: true, taskType: TaskType.Daily });
 		setIsAddingTask(false);
 	};
 
@@ -124,24 +126,35 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps)
 							/>
 						</div>
 
-						<div className="grid grid-cols-2 gap-3">
+						<div className="grid grid-cols-3 gap-3">
 							<div>
 								<label className="block text-xs text-gray-500 mb-1">Category</label>
 								<select
 									value={newTask.category}
-									onChange={(e) => setNewTask({ ...newTask, category: e.target.value })}
+									onChange={(e) => setNewTask({ ...newTask, category: e.target.value as SBCCategoryType })}
 									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
 								>
-									<option value="Upgrades">Upgrades</option>
-									<option value="Challenges">Challenges</option>
-									<option value="Players">Players</option>
-									<option value="Icons">Icons</option>
-									<option value="Foundations">Foundations</option>
+									{Object.values(SBCCategory).map((cat) => (
+										<option key={cat} value={cat}>{cat}</option>
+									))}
 								</select>
 							</div>
 
 							<div>
-								<label className="block text-xs text-gray-500 mb-1">Repeat Count</label>
+								<label className="block text-xs text-gray-500 mb-1">Task Type</label>
+								<select
+									value={newTask.taskType}
+									onChange={(e) => setNewTask({ ...newTask, taskType: e.target.value as TaskTypeType })}
+									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
+								>
+									<option value={TaskType.Daily}>Daily</option>
+									<option value={TaskType.Optional}>Optional</option>
+									<option value={TaskType.Complex}>Complex</option>
+								</select>
+							</div>
+
+							<div>
+								<label className="block text-xs text-gray-500 mb-1">Repeat</label>
 								<input
 									type="number"
 									min="1"

@@ -136,7 +136,7 @@ app.post('/api/browser/init', async (req, res) => {
       await taskRunner.close();
     }
 
-    taskRunner = new TaskRunner(broadcastLog);
+    taskRunner = new TaskRunner(broadcastLog, broadcastTaskStatus);
     await taskRunner.initialize();
 
     res.json({ success: true, message: 'Browser initialized' });
