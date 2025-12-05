@@ -71,6 +71,28 @@
           "isPositionDefined": false
         }
       }
+    },
+    {
+      "id": "daily-common-gold-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Daily Common Gold Upgrade",
+      "repeatCount": 1,
+      "enabled": true,
+      "taskType": "complex",
+      "complexConfig": {
+        "silverCards": {
+          "count": 5,
+          "quality": "Silver",
+          "rarity": "Common",
+          "isPositionDefined": false
+        },
+        "bronzeCards": {
+          "count": 5,
+          "quality": "Bronze",
+          "rarity": "Common",
+          "isPositionDefined": false
+        }
+      }
     }
   ],
   "squadBuilderRules": {

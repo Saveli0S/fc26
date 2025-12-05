@@ -27,6 +27,9 @@ export class ComplexTaskHandler {
     this.log('=== Starting Complex Task (Manual Card Selection) ===', 'info');
 
     try {
+      // First, check if "Clear Squad" button is visible and click it
+      await this.handleClearSquad();
+
       // Build list of card requirements in order
       const requirements: { requirement: CardRequirement; type: string }[] = [];
 
@@ -72,6 +75,85 @@ export class ComplexTaskHandler {
     } catch (error) {
       this.log(`Complex task failed: ${error}`, 'error');
       return false;
+    }
+  }
+
+  /**
+   * Handle "Clear Squad" button if visible, and confirm the modal
+   */
+  private async handleClearSquad(): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    try {
+      this.log('Checking for "Clear Squad" button...');
+
+      // Look for Clear Squad button
+      const clearSquadSelectors = [
+        'button:has-text("Clear Squad")',
+        '.ut-squad-tab-button-control:has-text("Clear")',
+        '[class*="clear"]:has-text("Clear")',
+        'button.btn-standard:has-text("Clear")',
+      ];
+
+      for (const selector of clearSquadSelectors) {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 1000 }).catch(() => false)) {
+          // Check if button is enabled (not disabled)
+          const isDisabled = await btn.isDisabled().catch(() => false);
+          if (!isDisabled) {
+            this.log('Found "Clear Squad" button, clicking...');
+            await btn.click({ force: true });
+            await this.browserManager.sleep(500);
+
+            // Handle confirmation modal - click "Ok"
+            await this.handleConfirmationModal();
+            return;
+          }
+        }
+      }
+
+      this.log('No active "Clear Squad" button found');
+
+    } catch (error) {
+      this.log(`Error handling Clear Squad: ${error}`, 'warning');
+    }
+  }
+
+  /**
+   * Handle confirmation modal (click "Ok" or "Yes")
+   */
+  private async handleConfirmationModal(): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    try {
+      this.log('Looking for confirmation modal...');
+      await this.browserManager.sleep(500);
+
+      // Look for Ok/Yes/Confirm button in modal
+      const confirmSelectors = [
+        'button:has-text("Ok")',
+        'button:has-text("OK")',
+        'button:has-text("Yes")',
+        'button:has-text("Confirm")',
+        '.ut-button-group button.btn-standard',
+        '.modal button.call-to-action',
+      ];
+
+      for (const selector of confirmSelectors) {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+          this.log(`Clicking confirmation button: ${selector}`);
+          await btn.click({ force: true });
+          await this.browserManager.sleep(1000);
+          this.log('✓ Confirmed Clear Squad', 'success');
+          return;
+        }
+      }
+
+      this.log('No confirmation button found', 'warning');
+
+    } catch (error) {
+      this.log(`Error handling confirmation: ${error}`, 'warning');
     }
   }
 
@@ -275,6 +357,12 @@ export class ComplexTaskHandler {
     await this.setCheckbox('Exclude Active Squad', true);
     await this.browserManager.sleep(300);
 
+	// 5. Quality filter (Bronze/Silver/Gold)
+	this.log(`  Config quality: "${requirement.quality}"`, 'info');
+	await this.setQualityFilter(requirement.quality);
+	this.log('  Pausing 15s to verify Quality selection...');
+	await this.browserManager.sleep(500);
+
     // 3. Sort By: Rating Low to High
     await this.setDropdown('Sort By', 'Low to High');
     await this.browserManager.sleep(300);
@@ -282,12 +370,6 @@ export class ComplexTaskHandler {
     // 4. Max OVR: 85
     await this.setMaxOVR(85);
     await this.browserManager.sleep(300);
-
-    // 5. Quality filter (Bronze/Silver/Gold)
-    this.log(`  Config quality: "${requirement.quality}"`, 'info');
-    await this.setQualityFilter(requirement.quality);
-    this.log('  Pausing 15s to verify Quality selection...');
-    await this.browserManager.sleep(15000);
 
     // 6. Rarity filter (Common/Rare)
     await this.setRarityFilter(requirement.rarity);
