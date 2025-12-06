@@ -3,9 +3,10 @@ import { LogEntry } from '../types';
 
 interface StatusLogProps {
 	logs: LogEntry[];
+	onClearLogs: () => void;
 }
 
-export function StatusLog({ logs }: StatusLogProps) {
+export function StatusLog({ logs, onClearLogs }: StatusLogProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -29,6 +30,12 @@ export function StatusLog({ logs }: StatusLogProps) {
 				<div className="w-2 h-2 rounded-full bg-ea-green animate-pulse" />
 				<h3 className="text-sm font-medium text-gray-300">Live Log</h3>
 				<span className="text-xs text-gray-500 ml-auto">{logs.length} entries</span>
+				<button
+					onClick={onClearLogs}
+					className="px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+				>
+					Clear
+				</button>
 			</div>
 
 			<div

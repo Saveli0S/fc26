@@ -4,7 +4,7 @@
       "id": "daily-bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Bronze Upgrade",
-      "repeatCount": 2,
+      "repeatCount": 3,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
@@ -30,12 +30,25 @@
       "id": "daily-rare-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Rare Gold Upgrade",
-      "repeatCount": 2,
+      "repeatCount": 3,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
         "quality": "Gold",
-        "rarity": "Rare",
+        "rarity": "Common",
+        "ignorePosition": true
+      }
+    },
+    {
+      "id": "bronze-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Bronze Upgrade",
+      "repeatCount": 3,
+      "enabled": true,
+      "taskType": "daily",
+      "squadBuilderFilters": {
+        "quality": "Bronze",
+        "rarity": "Common",
         "ignorePosition": true
       }
     },
@@ -57,8 +70,8 @@
       "category": "Upgrades",
       "cardTitle": "Prime Bronze Players Upgrade",
       "repeatCount": 1,
-      "enabled": true,
-      "taskType": "daily",
+      "enabled": false,
+      "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Bronze",
         "rarity": "Common",
@@ -66,14 +79,14 @@
       }
     },
     {
-      "id": "bronze-upgrade",
+      "id": "prime-silver-upgrade",
       "category": "Upgrades",
-      "cardTitle": "Bronze Upgrade",
+      "cardTitle": "Prime Silver Players Upgrade",
       "repeatCount": 1,
-      "enabled": true,
-      "taskType": "daily",
+      "enabled": false,
+      "taskType": "optional",
       "squadBuilderFilters": {
-        "quality": "Bronze",
+        "quality": "Silver",
         "rarity": "Common",
         "ignorePosition": true
       }
@@ -82,7 +95,7 @@
       "id": "gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Gold Upgrade",
-      "repeatCount": 1,
+      "repeatCount": 2,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {

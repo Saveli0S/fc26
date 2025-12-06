@@ -333,7 +333,7 @@ function App() {
 							/>
 						)}
 
-						<StatusLog logs={logs} />
+						<StatusLog logs={logs} onClearLogs={() => setLogs([])} />
 					</div>
 
 					{/* Right Column - Config */}
