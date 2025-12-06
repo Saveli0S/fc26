@@ -7,6 +7,13 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { api } from './hooks/useApi';
 import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules } from './types';
 
+// LocalStorage keys for credentials
+const STORAGE_KEYS = {
+	EMAIL: 'fc26_ea_email',
+	PASSWORD: 'fc26_ea_password',
+	REMEMBER: 'fc26_remember_credentials',
+};
+
 function App() {
 	const [config, setConfig] = useState<Config | null>(null);
 	const [status, setStatus] = useState<AppStatus>({ browserInitialized: false, isRunning: false });
@@ -16,6 +23,42 @@ function App() {
 	const [error, setError] = useState<string | null>(null);
 	const [showReport, setShowReport] = useState(false);
 	const runningAllTasks = useRef(false);
+
+	// Credentials state
+	const [email, setEmail] = useState(() => localStorage.getItem(STORAGE_KEYS.EMAIL) || '');
+	const [password, setPassword] = useState(() => localStorage.getItem(STORAGE_KEYS.PASSWORD) || '');
+	const [rememberCredentials, setRememberCredentials] = useState(
+		() => localStorage.getItem(STORAGE_KEYS.REMEMBER) === 'true'
+	);
+
+	// Save/clear credentials when remember checkbox changes
+	const handleRememberChange = (checked: boolean) => {
+		setRememberCredentials(checked);
+		if (checked) {
+			localStorage.setItem(STORAGE_KEYS.REMEMBER, 'true');
+			localStorage.setItem(STORAGE_KEYS.EMAIL, email);
+			localStorage.setItem(STORAGE_KEYS.PASSWORD, password);
+		} else {
+			localStorage.removeItem(STORAGE_KEYS.REMEMBER);
+			localStorage.removeItem(STORAGE_KEYS.EMAIL);
+			localStorage.removeItem(STORAGE_KEYS.PASSWORD);
+		}
+	};
+
+	// Update stored credentials when they change (if remember is enabled)
+	const handleEmailChange = (value: string) => {
+		setEmail(value);
+		if (rememberCredentials) {
+			localStorage.setItem(STORAGE_KEYS.EMAIL, value);
+		}
+	};
+
+	const handlePasswordChange = (value: string) => {
+		setPassword(value);
+		if (rememberCredentials) {
+			localStorage.setItem(STORAGE_KEYS.PASSWORD, value);
+		}
+	};
 
 	// WebSocket handlers
 	const handleLog = useCallback((entry: LogEntry) => {
@@ -89,10 +132,14 @@ function App() {
 	};
 
 	const handleLogin = async () => {
+		if (!email || !password) {
+			setError('Please enter email and password');
+			return;
+		}
 		setLoading(true);
 		setError(null);
 		try {
-			await api.login();
+			await api.login({ email, password });
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to login');
 		} finally {
@@ -259,6 +306,44 @@ function App() {
 					</div>
 				)}
 
+				{/* EA Credentials */}
+				<div className="mb-6 p-4 bg-[#131820] border border-ea-border rounded-lg">
+					<div className="flex items-center gap-2 mb-3">
+						<span className="text-sm font-medium text-gray-300">🔐 EA Account Credentials</span>
+					</div>
+					<div className="flex flex-wrap items-end gap-4">
+						<div className="flex-1 min-w-[200px]">
+							<label className="block text-xs text-gray-500 mb-1">Email</label>
+							<input
+								type="email"
+								value={email}
+								onChange={(e) => handleEmailChange(e.target.value)}
+								placeholder="your@email.com"
+								className="w-full px-3 py-2 bg-[#0a0e14] border border-ea-border rounded text-sm text-white placeholder-gray-600 focus:outline-none focus:border-ea-blue"
+							/>
+						</div>
+						<div className="flex-1 min-w-[200px]">
+							<label className="block text-xs text-gray-500 mb-1">Password</label>
+							<input
+								type="password"
+								value={password}
+								onChange={(e) => handlePasswordChange(e.target.value)}
+								placeholder="••••••••"
+								className="w-full px-3 py-2 bg-[#0a0e14] border border-ea-border rounded text-sm text-white placeholder-gray-600 focus:outline-none focus:border-ea-blue"
+							/>
+						</div>
+						<label className="flex items-center gap-2 cursor-pointer pb-2">
+							<input
+								type="checkbox"
+								checked={rememberCredentials}
+								onChange={(e) => handleRememberChange(e.target.checked)}
+								className="w-4 h-4 rounded border-ea-border bg-[#0a0e14] text-ea-green focus:ring-ea-green focus:ring-offset-0"
+							/>
+							<span className="text-xs text-gray-400">Remember</span>
+						</label>
+					</div>
+				</div>
+
 				{/* Control Bar */}
 				<div className="mb-6 flex flex-wrap items-center gap-3 p-4 bg-[#131820] border border-ea-border rounded-lg">
 					<button
@@ -274,8 +359,8 @@ function App() {
 
 					<button
 						onClick={handleLogin}
-						disabled={loading || !status.browserInitialized}
-						className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized
+						disabled={loading || !status.browserInitialized || !email || !password}
+						className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || !email || !password
 							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
 							: 'bg-ea-purple/10 text-ea-purple border border-ea-purple/30 hover:bg-ea-purple/20'
 							}`}

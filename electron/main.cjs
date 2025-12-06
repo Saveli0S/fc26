@@ -58,11 +58,22 @@ async function startBackend() {
       NODE_ENV: 'production',
     };
 
-    // In production, run compiled JavaScript
-    backendProcess = spawn('node', ['dist/index.js'], {
+    // In production, run compiled JavaScript using Electron's node
+    const nodePath = process.execPath; // Use Electron's bundled node
+    const scriptPath = path.join(backendPath, 'dist', 'index.js');
+
+    console.log('Starting backend with:', nodePath, scriptPath);
+    console.log('Backend path:', backendPath);
+    console.log('Config path:', configPath);
+    console.log('Storage path:', storagePath);
+
+    // Use fork-like approach with Electron's node
+    backendProcess = spawn(nodePath, [scriptPath], {
       cwd: backendPath,
-      env,
-      shell: true,
+      env: {
+        ...env,
+        ELECTRON_RUN_AS_NODE: '1', // Tell Electron to act as Node.js
+      },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 

@@ -155,7 +155,8 @@ app.post('/api/browser/login', async (req, res) => {
       return res.status(400).json({ error: 'Browser not initialized' });
     }
 
-    const success = await taskRunner.login();
+    const { email, password } = req.body || {};
+    const success = await taskRunner.login(email, password);
     res.json({ success, message: success ? 'Logged in successfully' : 'Login failed' });
   } catch (error) {
     res.status(500).json({ error: String(error) });

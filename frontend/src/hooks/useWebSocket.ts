@@ -14,8 +14,10 @@ export function useWebSocket(
   const [connected, setConnected] = useState(false);
 
   const connect = useCallback(() => {
+    // In Electron (file://), use localhost explicitly
+    const isFileProtocol = window.location.protocol === 'file:';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
+    const host = isFileProtocol ? 'localhost' : (window.location.hostname || 'localhost');
     const port = '3001'; // Backend port
     const wsUrl = `${protocol}//${host}:${port}`;
 

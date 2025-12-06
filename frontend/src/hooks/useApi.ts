@@ -1,6 +1,8 @@
 import { Config, Task, AppStatus } from '../types';
 
-const API_BASE = '/api';
+// In Electron (file://), use localhost explicitly
+const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
+const API_BASE = isFileProtocol ? 'http://localhost:3001/api' : '/api';
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -49,9 +51,10 @@ export const api = {
     fetchApi<{ success: boolean; message: string }>('/browser/init', {
       method: 'POST',
     }),
-  login: () =>
+  login: (credentials?: { email: string; password: string }) =>
     fetchApi<{ success: boolean; message: string }>('/browser/login', {
       method: 'POST',
+      body: JSON.stringify(credentials || {}),
     }),
   closeBrowser: () =>
     fetchApi<{ success: boolean; message: string }>('/browser/close', {

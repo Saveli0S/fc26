@@ -74,8 +74,8 @@ export class TaskRunner {
     this.log('Task runner initialized', 'success');
   }
 
-  async login(): Promise<boolean> {
-    return await this.authManager.login();
+  async login(email?: string, password?: string): Promise<boolean> {
+    return await this.authManager.login(email, password);
   }
 
   async close(): Promise<void> {

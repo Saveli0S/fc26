@@ -137,6 +137,8 @@ const SELECTORS = {
 export class AuthManager {
   private browserManager: BrowserManager;
   private log: LogCallback;
+  private email: string = '';
+  private password: string = '';
 
   constructor(browserManager: BrowserManager, logCallback?: LogCallback) {
     this.browserManager = browserManager;
@@ -147,7 +149,16 @@ export class AuthManager {
   // Public Methods
   // ==========================================================================
 
-  async login(): Promise<boolean> {
+  async login(email?: string, password?: string): Promise<boolean> {
+    // Use provided credentials or fall back to env vars
+    this.email = email || CONFIG.EA_EMAIL;
+    this.password = password || CONFIG.EA_PASSWORD;
+
+    if (!this.email || !this.password) {
+      this.log('No credentials provided. Please enter email and password.', 'error');
+      return false;
+    }
+
     const page = this.browserManager.getPage();
 
     this.log('Navigating to EA Web App...');
@@ -250,10 +261,10 @@ export class AuthManager {
   }
 
   private async fillEmail(frame: Page | Frame): Promise<void> {
-    const filled = await this.tryFillInput(frame, SELECTORS.EMAIL_INPUT, CONFIG.EA_EMAIL);
+    const filled = await this.tryFillInput(frame, SELECTORS.EMAIL_INPUT, this.email);
 
     if (filled) {
-      this.log(`Filled email: ${CONFIG.EA_EMAIL}`, 'success');
+      this.log(`Filled email: ${this.email}`, 'success');
     } else {
       throw new Error('Could not find email input field');
     }
@@ -275,7 +286,7 @@ export class AuthManager {
   }
 
   private async fillPassword(frame: Page | Frame): Promise<void> {
-    const filled = await this.tryFillInput(frame, SELECTORS.PASSWORD_INPUT, CONFIG.EA_PASSWORD);
+    const filled = await this.tryFillInput(frame, SELECTORS.PASSWORD_INPUT, this.password);
 
     if (filled) {
       this.log('Filled password', 'success');

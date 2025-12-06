@@ -16,10 +16,11 @@
     "build": "npm run build --workspaces",
     "start": "npm run start --workspace=backend",
     "electron:dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder",
-    "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:win": "npm run build && electron-builder --win",
-    "electron:build:linux": "npm run build && electron-builder --linux"
+    "electron:prebuild": "rm -rf backend/node_modules && cp -R node_modules backend/node_modules",
+    "electron:build": "npm run build && npm run electron:prebuild && electron-builder",
+    "electron:build:mac": "npm run build && npm run electron:prebuild && electron-builder --mac",
+    "electron:build:win": "npm run build && npm run electron:prebuild && electron-builder --win",
+    "electron:build:linux": "npm run build && npm run electron:prebuild && electron-builder --linux"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
@@ -30,6 +31,7 @@
   "build": {
     "appId": "com.fc26.sbc-automation",
     "productName": "FC26 SBC Automation",
+    "electronVersion": "28.3.3",
     "directories": {
       "output": "release"
     },
