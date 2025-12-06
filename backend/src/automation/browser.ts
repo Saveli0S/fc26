@@ -12,9 +12,12 @@ export type LogCallback = (message: string, type?: 'info' | 'error' | 'success' 
 // Configuration
 // ============================================================================
 
+// Use STORAGE_PATH env var if set (for Electron), otherwise default to ./storage
+const STORAGE_BASE = process.env.STORAGE_PATH || join(process.cwd(), 'storage');
+
 const CONFIG = {
   PATHS: {
-    STORAGE: join(process.cwd(), 'storage'),
+    STORAGE: STORAGE_BASE,
     get COOKIES() { return join(this.STORAGE, 'cookies.json'); },
     get USER_DATA_DIR() { return join(this.STORAGE, 'browser-profile'); },
     get SCREENSHOTS() { return join(this.STORAGE, 'screenshots'); },

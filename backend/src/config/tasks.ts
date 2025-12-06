@@ -94,7 +94,8 @@ export type Task = z.infer<typeof TaskSchema>;
 export type SquadBuilderRules = z.infer<typeof SquadBuilderRulesSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
 
-const CONFIG_PATH = join(process.cwd(), '..', 'tasks.config.json');
+// Use CONFIG_PATH env var if set (for Electron), otherwise default to project root
+const CONFIG_PATH = process.env.CONFIG_PATH || join(process.cwd(), '..', 'tasks.config.json');
 
 export function loadConfig(): Config {
   if (!existsSync(CONFIG_PATH)) {

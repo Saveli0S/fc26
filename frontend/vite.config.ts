@@ -4,8 +4,10 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  base: './', // Important for Electron - use relative paths
   build: {
     sourcemap: true,
+    outDir: 'dist',
   },
   css: {
     devSourcemap: true,
@@ -21,6 +23,10 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://localhost:3001',
+        ws: true,
       },
     },
   },

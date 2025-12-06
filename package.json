@@ -1,6 +1,10 @@
 {
   "name": "fc26-sbc-automation",
+  "version": "1.0.0",
+  "description": "FC26 SBC Automation Desktop App",
+  "author": "Saveli_S",
   "private": true,
+  "main": "electron/main.cjs",
   "workspaces": [
     "backend",
     "frontend"
@@ -10,9 +14,63 @@
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
-    "start": "npm run start --workspace=backend"
+    "start": "npm run start --workspace=backend",
+    "electron:dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:linux": "npm run build && electron-builder --linux"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.fc26.sbc-automation",
+    "productName": "FC26 SBC Automation",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "backend/dist/**/*",
+      "backend/package.json",
+      "tasks.config.json",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "backend/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["dist/**/*", "package.json", "node_modules/**/*"]
+      },
+      {
+        "from": "tasks.config.json",
+        "to": "tasks.config.json"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": ["dmg", "zip"],
+      "icon": "electron/icons/icon.icns"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "electron/icons/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "electron/icons"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

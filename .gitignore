@@ -30,3 +30,11 @@ backend/storage/
 # Playwright
 playwright-report/
 test-results/
+
+# Electron
+release/
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.snap
