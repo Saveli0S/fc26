@@ -6,7 +6,7 @@ import { BrowserManager, LogCallback } from './browser.js';
 // ============================================================================
 
 export interface DropdownConfig {
-  identifierInHtml: string;  // e.g., '/level/' for Quality, '/rarity/' for Rarity
+  identifiers: string[];     // List of possible identifiers to find the dropdown
   fallbackIndex?: number;    // Fallback index if not found by identifier
 }
 
@@ -340,34 +340,47 @@ export class UIHelper {
 
   /**
    * Set inline dropdown by finding it via HTML content identifier
+   * IMPORTANT: Matches options by TEXT VALUE, not by index/order
    */
   async setInlineDropdown(config: DropdownConfig, value: string): Promise<boolean> {
-    const valueLower = value.toLowerCase();
+    this.log(`  [DROPDOWN] Requested value: "${value}"`, 'info');
+    const valueLower = value.toLowerCase().trim();
 
     const allDropdowns = this.page.locator(EA_SELECTORS.INLINE_DROPDOWN);
     const count = await allDropdowns.count();
 
-    // Find dropdown by identifier
+    // Find dropdown by checking all identifiers in the list
     let targetDropdown: Locator | null = null;
+    let dropdownIndex = -1;
+    let matchedIdentifier = '';
 
     for (let i = 0; i < count; i++) {
       const dropdown = allDropdowns.nth(i);
       const html = await dropdown.innerHTML().catch(() => '');
-      if (html.includes(config.identifierInHtml)) {
-        targetDropdown = dropdown;
-        this.log(`  Found dropdown with "${config.identifierInHtml}" at index ${i}`);
-        break;
+
+      // Check each identifier
+      for (const identifier of config.identifiers) {
+        if (html.includes(identifier)) {
+          targetDropdown = dropdown;
+          dropdownIndex = i;
+          matchedIdentifier = identifier;
+          this.log(`  [DROPDOWN] Found dropdown with "${identifier}" at index ${i}`);
+          break;
+        }
       }
+
+      if (targetDropdown) break;
     }
 
     // Fallback to index
     if (!targetDropdown && config.fallbackIndex !== undefined && count > config.fallbackIndex) {
       targetDropdown = allDropdowns.nth(config.fallbackIndex);
-      this.log(`  Using fallback dropdown at index ${config.fallbackIndex}`);
+      dropdownIndex = config.fallbackIndex;
+      this.log(`  [DROPDOWN] Using fallback dropdown at index ${config.fallbackIndex}`, 'warning');
     }
 
     if (!targetDropdown) {
-      this.log(`  ✗ Dropdown not found`, 'warning');
+      this.log(`  [DROPDOWN] ✗ Dropdown not found`, 'error');
       return false;
     }
 
@@ -376,32 +389,50 @@ export class UIHelper {
     await dropdownRow.click({ force: true });
     await this.sleep(DELAYS.MEDIUM);
 
-    // Try getByText first
-    const targetOption = targetDropdown.getByText(value, { exact: true });
-    if (await targetOption.isVisible({ timeout: TIMEOUTS.MEDIUM }).catch(() => false)) {
-      await targetOption.click({ force: true });
-      this.log(`  ✓ Set dropdown = "${value}"`, 'success');
-      await this.sleep(DELAYS.SHORT);
-      return true;
-    }
-
-    // Fallback: iterate through options
+    // Get all options and find by TEXT match (not by index!)
     const options = targetDropdown.locator(EA_SELECTORS.DROPDOWN_OPTIONS);
     const optionCount = await options.count();
 
+    // Log all available options with their indices for debugging
+    this.log(`  [DROPDOWN] Found ${optionCount} options:`);
+    const availableOptions: { index: number; text: string }[] = [];
     for (let i = 0; i < optionCount; i++) {
-      const option = options.nth(i);
-      const text = await option.textContent().catch(() => '') || '';
-      if (text.trim().toLowerCase() === valueLower) {
-        await option.click({ force: true });
-        this.log(`  ✓ Set dropdown = "${value}"`, 'success');
+      const text = (await options.nth(i).textContent().catch(() => '') || '').trim();
+      availableOptions.push({ index: i, text });
+      this.log(`    [${i}] "${text}"`);
+    }
+
+    // Find and click option by EXACT TEXT VALUE match (case-insensitive)
+    for (const opt of availableOptions) {
+      if (opt.text.toLowerCase() === valueLower) {
+        this.log(`  [DROPDOWN] EXACT MATCH: Clicking option [${opt.index}] "${opt.text}"`, 'success');
+        await options.nth(opt.index).click({ force: true });
         await this.sleep(DELAYS.SHORT);
+
+        // Verify what was selected
+        const selectedText = await dropdownRow.textContent().catch(() => '') || '';
+        this.log(`  [DROPDOWN] After click, selected text: "${selectedText.trim()}"`, 'info');
+        return true;
+      }
+    }
+
+    // Try partial match as last resort (e.g., "Gold" matches "Gold Players")
+    for (const opt of availableOptions) {
+      const textLower = opt.text.toLowerCase();
+      if (textLower.includes(valueLower) || valueLower.includes(textLower)) {
+        this.log(`  [DROPDOWN] PARTIAL MATCH: Clicking option [${opt.index}] "${opt.text}" for requested "${value}"`, 'warning');
+        await options.nth(opt.index).click({ force: true });
+        await this.sleep(DELAYS.SHORT);
+
+        // Verify what was selected
+        const selectedText = await dropdownRow.textContent().catch(() => '') || '';
+        this.log(`  [DROPDOWN] After click, selected text: "${selectedText.trim()}"`, 'info');
         return true;
       }
     }
 
     await this.page.keyboard.press('Escape');
-    this.log(`  ✗ Could not find option "${value}"`, 'warning');
+    this.log(`  [DROPDOWN] ✗ No match for "${value}" in options`, 'error');
     return false;
   }
 

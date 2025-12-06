@@ -8,8 +8,25 @@ import { UIHelper, DELAYS, TIMEOUTS } from './ui-helpers.js';
 
 const CONFIG = {
   FILTERS: {
-    QUALITY: { identifierInHtml: '/level/', fallbackIndex: 0 },
-    RARITY: { identifierInHtml: '/rarity/', fallbackIndex: 1 },
+    // Quality dropdown - check for all level images
+    QUALITY: {
+      identifiers: [
+        'SearchFilters/level/any.png',
+        'SearchFilters/level/bronze.png',
+        'SearchFilters/level/silver.png',
+        'SearchFilters/level/gold.png',
+      ],
+      fallbackIndex: 4,
+    },
+    // Rarity dropdown - check for rarity images or EA CDN background images
+    RARITY: {
+      identifiers: [
+        'SearchFilters/rarity/any.png',
+        'backgrounds/itemBGs/929f3299',
+        'backgrounds/itemBGs/7535d322',
+      ],
+      fallbackIndex: 5,
+    },
   },
   SELECTORS: {
     BUILD: [

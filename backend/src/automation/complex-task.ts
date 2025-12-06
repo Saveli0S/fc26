@@ -17,8 +17,25 @@ interface CardTypeRequirement {
 
 const CONFIG = {
   FILTERS: {
-    QUALITY: { identifierInHtml: '/level/', fallbackIndex: 0 },
-    RARITY: { identifierInHtml: '/rarity/', fallbackIndex: 1 },
+    // Quality dropdown - check for all level images
+    QUALITY: {
+      identifiers: [
+        'SearchFilters/level/any.png',
+        'SearchFilters/level/bronze.png',
+        'SearchFilters/level/silver.png',
+        'SearchFilters/level/gold.png',
+      ],
+      fallbackIndex: 4,
+    },
+    // Rarity dropdown - check for rarity images or EA CDN background images
+    RARITY: {
+      identifiers: [
+        'SearchFilters/rarity/any.png',
+        'backgrounds/itemBGs/929f3299',
+        'backgrounds/itemBGs/7535d322',
+      ],
+      fallbackIndex: 5,
+    },
   },
   DEFAULT_MAX_OVR: 85,
 };
@@ -108,8 +125,13 @@ export class ComplexTaskHandler {
   }
 
   private async finalizeTask(): Promise<boolean> {
-    this.log('All cards added. Checking Exchange Players button...', 'info');
+    this.log('All cards added. Closing player details panel...', 'info');
 
+    // Step 1: Close the Player Details sidebar by clicking outside it
+    await this.closePlayerDetailsPanel();
+
+    // Step 2: Wait for the Exchange Players button to appear
+    this.log('Checking Exchange Players button...', 'info');
     const success = await this.clickExchangePlayers();
     if (!success) {
       this.log('Exchange Players button is disabled or not found', 'error');
@@ -118,6 +140,34 @@ export class ComplexTaskHandler {
 
     this.log('=== Complex Task Completed Successfully ===', 'success');
     return true;
+  }
+
+  private async closePlayerDetailsPanel(): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    // Click outside the right panel to close Player Details
+    // Try clicking on the squad area (left side of the screen)
+    const clickTargets = [
+      '.ut-squad-pitch-view',
+      '.ut-squad-building-content',
+      '.ut-sbc-challenge-content',
+      '.ut-squad-summary-info',
+      '.ut-navigation-bar-view',
+    ];
+
+    for (const selector of clickTargets) {
+      const element = page.locator(selector).first();
+      if (await element.isVisible({ timeout: TIMEOUTS.SHORT }).catch(() => false)) {
+        await element.click({ force: true, position: { x: 10, y: 10 } });
+        this.log('Clicked outside panel to close it', 'info');
+        await this.sleep(DELAYS.LONG);
+        break;
+      }
+    }
+
+    // Also try pressing Escape
+    await page.keyboard.press('Escape');
+    await this.sleep(DELAYS.MEDIUM);
   }
 
   // ==========================================================================
@@ -294,25 +344,48 @@ export class ComplexTaskHandler {
 
   private async clickExchangePlayers(): Promise<boolean> {
     const page = this.browserManager.getPage();
-    const exchangeBtn = page.locator(EA_SELECTORS.EXCHANGE_PLAYERS.join(', ')).first();
 
-    if (await exchangeBtn.isVisible({ timeout: TIMEOUTS.MEDIUM })) {
-      const isDisabled = await exchangeBtn.isDisabled();
-      if (isDisabled) {
-        this.log('Exchange Players button is disabled', 'error');
-        return false;
+    // Wait for the Exchange Players button to appear in the new panel
+    await this.sleep(DELAYS.LONG);
+
+    // Extended selectors for Exchange Players button
+    const exchangeSelectors = [
+      ...EA_SELECTORS.EXCHANGE_PLAYERS,
+      'button.ut-squad-tab-button-control:has-text("Exchange")',
+      '.ut-squad-tab-button-control:has-text("Exchange")',
+      'button:has-text("Exchange Players")',
+      'button:has-text("Обменять")',
+    ];
+
+    for (const selector of exchangeSelectors) {
+      const exchangeBtn = page.locator(selector).first();
+
+      if (await exchangeBtn.isVisible({ timeout: TIMEOUTS.LONG }).catch(() => false)) {
+        // Check if button is enabled (not disabled)
+        const classList = await exchangeBtn.getAttribute('class') || '';
+        const isDisabled = classList.includes('disabled') || await exchangeBtn.isDisabled().catch(() => false);
+
+        if (isDisabled) {
+          this.log('Exchange Players button is disabled', 'warning');
+          continue;
+        }
+
+        await exchangeBtn.click({ force: true });
+        this.log('✓ Clicked Exchange Players', 'success');
+        await this.sleep(DELAYS.EXTRA_LONG);
+
+        // Handle confirmation modal
+        const confirmed = await this.ui.handleConfirmationModal();
+        if (confirmed) {
+          this.log('✓ Confirmed exchange', 'success');
+        }
+
+        await this.sleep(DELAYS.EXTRA_LONG);
+        return true;
       }
-
-      await exchangeBtn.click();
-      this.log('Clicked Exchange Players', 'success');
-      await this.sleep(DELAYS.EXTRA_LONG);
-
-      // Handle confirmation
-      await this.ui.handleConfirmationModal();
-      return true;
     }
 
-    this.log('Exchange Players button not found', 'error');
+    this.log('Exchange Players button not found or disabled', 'error');
     return false;
   }
 

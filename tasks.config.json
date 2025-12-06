@@ -40,19 +40,6 @@
       }
     },
     {
-      "id": "bronze-upgrade",
-      "category": "Upgrades",
-      "cardTitle": "Bronze Upgrade",
-      "repeatCount": 3,
-      "enabled": true,
-      "taskType": "daily",
-      "squadBuilderFilters": {
-        "quality": "Bronze",
-        "rarity": "Common",
-        "ignorePosition": true
-      }
-    },
-    {
       "id": "silver-upgrade-3x",
       "category": "Upgrades",
       "cardTitle": "Silver Upgrade",
@@ -121,6 +108,22 @@
         "silverCards": {
           "count": 5,
           "quality": "Silver",
+          "rarity": "Common",
+          "isPositionDefined": false
+        }
+      }
+    },
+    {
+      "id": "bronze-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Bronze Upgrade",
+      "repeatCount": 3,
+      "enabled": true,
+      "taskType": "complex",
+      "complexConfig": {
+        "bronzeCards": {
+          "count": 11,
+          "quality": "Bronze",
           "rarity": "Common",
           "isPositionDefined": false
         }
