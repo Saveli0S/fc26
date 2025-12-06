@@ -71,11 +71,20 @@
       "cardTitle": "Prime Bronze Players Upgrade",
       "repeatCount": 1,
       "enabled": true,
-      "taskType": "optional",
-      "squadBuilderFilters": {
-        "quality": "Bronze",
-        "rarity": "Common",
-        "ignorePosition": true
+      "taskType": "complex",
+      "complexConfig": {
+        "bronzeCards": {
+          "count": 3,
+          "quality": "Bronze",
+          "rarity": "Rare",
+          "isPositionDefined": false
+        },
+        "silverCards": {
+          "count": 8,
+          "quality": "Bronze",
+          "rarity": "Common",
+          "isPositionDefined": false
+        }
       }
     },
     {
@@ -84,11 +93,20 @@
       "cardTitle": "Prime Silver Players Upgrade",
       "repeatCount": 1,
       "enabled": true,
-      "taskType": "optional",
-      "squadBuilderFilters": {
-        "quality": "Silver",
-        "rarity": "Common",
-        "ignorePosition": true
+      "taskType": "complex",
+      "complexConfig": {
+        "bronzeCards": {
+          "count": 3,
+          "quality": "Silver",
+          "rarity": "Rare",
+          "isPositionDefined": false
+        },
+        "silverCards": {
+          "count": 8,
+          "quality": "Silver",
+          "rarity": "Common",
+          "isPositionDefined": false
+        }
       }
     },
     {
