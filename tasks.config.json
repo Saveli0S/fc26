@@ -40,12 +40,25 @@
       }
     },
     {
+      "id": "bronze-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Bronze Upgrade",
+      "repeatCount": 3,
+      "enabled": false,
+      "taskType": "optional",
+      "squadBuilderFilters": {
+        "quality": "Bronze",
+        "rarity": "Common",
+        "ignorePosition": true
+      }
+    },
+    {
       "id": "silver-upgrade-3x",
       "category": "Upgrades",
       "cardTitle": "Silver Upgrade",
       "repeatCount": 3,
       "enabled": true,
-      "taskType": "daily",
+      "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Silver",
         "rarity": "Common",
@@ -57,7 +70,7 @@
       "category": "Upgrades",
       "cardTitle": "Prime Bronze Players Upgrade",
       "repeatCount": 1,
-      "enabled": false,
+      "enabled": true,
       "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Bronze",
@@ -70,7 +83,7 @@
       "category": "Upgrades",
       "cardTitle": "Prime Silver Players Upgrade",
       "repeatCount": 1,
-      "enabled": false,
+      "enabled": true,
       "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Silver",
@@ -83,8 +96,8 @@
       "category": "Upgrades",
       "cardTitle": "Gold Upgrade",
       "repeatCount": 2,
-      "enabled": true,
-      "taskType": "daily",
+      "enabled": false,
+      "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Gold",
         "rarity": "Common",
@@ -95,7 +108,7 @@
       "id": "daily-common-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Common Gold Upgrade",
-      "repeatCount": 2,
+      "repeatCount": 3,
       "enabled": true,
       "taskType": "complex",
       "complexConfig": {
@@ -108,22 +121,6 @@
         "silverCards": {
           "count": 5,
           "quality": "Silver",
-          "rarity": "Common",
-          "isPositionDefined": false
-        }
-      }
-    },
-    {
-      "id": "bronze-upgrade",
-      "category": "Upgrades",
-      "cardTitle": "Bronze Upgrade",
-      "repeatCount": 3,
-      "enabled": true,
-      "taskType": "complex",
-      "complexConfig": {
-        "bronzeCards": {
-          "count": 11,
-          "quality": "Bronze",
           "rarity": "Common",
           "isPositionDefined": false
         }
