@@ -134,13 +134,16 @@ app.post('/api/browser/init', async (req, res) => {
   try {
     if (taskRunner) {
       await taskRunner.close();
+      taskRunner = null;
     }
 
-    taskRunner = new TaskRunner(broadcastLog, broadcastTaskStatus);
-    await taskRunner.initialize();
+    const runner = new TaskRunner(broadcastLog, broadcastTaskStatus);
+    await runner.initialize();
+    taskRunner = runner; // Only assign after successful initialization
 
     res.json({ success: true, message: 'Browser initialized' });
   } catch (error) {
+    taskRunner = null; // Ensure taskRunner is null on failure
     res.status(500).json({ error: String(error) });
   }
 });

@@ -3,7 +3,12 @@ import { AuthManager } from './auth.js';
 import { SBCNavigator } from './sbc.js';
 import { SquadBuilder } from './squad-builder.js';
 import { ComplexTaskHandler } from './complex-task.js';
+import { UIHelper, EA_SELECTORS } from './ui-helpers.js';
 import { loadConfig, Task, SquadBuilderRules, TaskType } from '../config/tasks.js';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -17,10 +22,34 @@ export interface TaskResult {
 
 export type TaskStatusCallback = (result: TaskResult) => void;
 
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const CONFIG = {
+  TIMEOUTS: {
+    TASK_REPEAT: 30000, // 30 seconds per repeat
+  },
+  DELAYS: {
+    AFTER_NAVIGATION: 1000,
+    AFTER_CLEAR_SQUAD: 15000,
+    AFTER_CLICK: 1000,
+  },
+  SELECTORS: {
+    CHALLENGE_ROW: '.ut-sbc-challenge-table-row-view, [class*="challenge-row"]',
+    EMPTY_SLOT: 'div.ut-item-loading.empty, div.item.empty.droppable',
+  },
+};
+
+// ============================================================================
+// TaskRunner Class
+// ============================================================================
+
 export class TaskRunner {
   private browserManager: BrowserManager;
   private authManager: AuthManager;
   private sbcNavigator: SBCNavigator;
+  private ui: UIHelper | null = null;
   private log: LogCallback;
   private onTaskStatus: TaskStatusCallback | null = null;
   private isRunning = false;
@@ -34,34 +63,14 @@ export class TaskRunner {
     this.sbcNavigator = new SBCNavigator(this.browserManager, this.log);
   }
 
-  private broadcastTaskStatus(result: TaskResult): void {
-    if (this.onTaskStatus) {
-      this.onTaskStatus(result);
-    }
-  }
-
-  // Default timeout per task repeat (30 seconds)
-  private readonly TASK_TIMEOUT_MS = 30000;
-
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMsg: string): Promise<T> {
-    let timeoutId: NodeJS.Timeout;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(errorMsg)), timeoutMs);
-    });
-
-    try {
-      const result = await Promise.race([promise, timeoutPromise]);
-      clearTimeout(timeoutId!);
-      return result;
-    } catch (error) {
-      clearTimeout(timeoutId!);
-      throw error;
-    }
-  }
+  // ==========================================================================
+  // Public API - Lifecycle
+  // ==========================================================================
 
   async initialize(): Promise<void> {
     this.log('Initializing task runner...');
     await this.browserManager.initialize();
+    this.ui = new UIHelper(this.browserManager, this.log);
     this.log('Task runner initialized', 'success');
   }
 
@@ -69,154 +78,13 @@ export class TaskRunner {
     return await this.authManager.login();
   }
 
-  async runTask(task: Task, rules: SquadBuilderRules): Promise<TaskResult> {
-    const result: TaskResult = {
-      taskId: task.id,
-      status: 'pending',
-      completedRepeats: 0,
-      totalRepeats: task.repeatCount,
-    };
-
-    if (!task.enabled) {
-      result.status = 'skipped';
-      this.log(`Skipping disabled task: ${task.cardTitle}`);
-      return result;
-    }
-
-    result.status = 'running';
-    this.log(`Starting task: ${task.cardTitle} (${task.repeatCount}x)`, 'info');
-
-    try {
-      // Navigate to SBC
-      await this.sbcNavigator.navigateToSBC();
-
-      // Select category
-      await this.sbcNavigator.selectCategory(task.category);
-
-      // Find and click the card
-      const cardFound = await this.sbcNavigator.findAndClickCard(task.cardTitle);
-      if (!cardFound) {
-        result.status = 'failed';
-        result.error = `Card not found: ${task.cardTitle}`;
-        return result;
-      }
-
-      // Handle complex tasks with separate workflow (no Squad Builder)
-      if (task.taskType === TaskType.Complex && task.complexConfig) {
-        this.log('Using Complex Task workflow (manual card selection)...', 'info');
-
-        // Enter the squad view - click on challenge row if present
-        await this.enterSquadViewForComplexTask();
-
-        const complexHandler = new ComplexTaskHandler(this.browserManager, this.log);
-        const success = await complexHandler.execute(task.complexConfig);
-
-        if (success) {
-          result.status = 'completed';
-          result.completedRepeats = 1;
-          result.totalRepeats = 1;
-          this.log('Complex task completed successfully', 'success');
-        } else {
-          result.status = 'failed';
-          result.error = 'Complex task failed - could not add all required cards';
-          this.log('Complex task failed', 'error');
-        }
-
-        this.broadcastTaskStatus(result);
-
-        // Claim rewards if successful
-        if (success) {
-          await this.sbcNavigator.clickClaimRewards();
-        }
-
-        return result;
-      }
-
-      // For daily tasks, try to get repeat count from page
-      let repeatCount = task.repeatCount;
-      if (task.taskType === 'daily') {
-        const pageRepeatCount = await this.sbcNavigator.getRepeatCountFromPage();
-        if (pageRepeatCount !== null) {
-          if (pageRepeatCount === 0) {
-            // Task has 0 repeats available - skip it
-            this.log(`Task "${task.cardTitle}" has 0 repeats available - skipping`, 'warning');
-            result.status = 'skipped';
-            result.totalRepeats = 0;
-            result.completedRepeats = 0;
-            this.broadcastTaskStatus(result);
-            return result;
-          }
-          repeatCount = pageRepeatCount;
-          this.log(`Using repeat count from page: ${repeatCount}`, 'info');
-        } else {
-          this.log(`Using repeat count from config: ${repeatCount}`, 'info');
-        }
-      }
-      result.totalRepeats = repeatCount;
-      // Broadcast updated repeat count
-      this.broadcastTaskStatus(result);
-
-      // Execute repeats
-      for (let i = 0; i < repeatCount; i++) {
-        // Check stop flag frequently
-        if (this.checkStop(result)) return result;
-
-        this.log(`=== Repeat ${i + 1}/${repeatCount} ===`, 'info');
-
-        try {
-          // Wrap each repeat in a timeout
-          await this.withTimeout(
-            this.executeRepeat(task, rules, result, i, repeatCount),
-            this.TASK_TIMEOUT_MS,
-            `Timeout: repeat ${i + 1} took more than ${this.TASK_TIMEOUT_MS / 1000}s`
-          );
-
-          result.completedRepeats++;
-          this.log(`✓ Completed ${result.completedRepeats}/${result.totalRepeats}`, 'success');
-          this.broadcastTaskStatus(result);
-
-          // Navigate back to SBC page after each repeat
-          this.log('Navigating back to SBC page...');
-          await this.sbcNavigator.navigateToSBC();
-          if (this.checkStop(result)) return result;
-          await this.browserManager.sleep(1000);
-
-        } catch (repeatError) {
-          const errorMsg = repeatError instanceof Error ? repeatError.message : String(repeatError);
-          this.log(`✗ Repeat ${i + 1} failed: ${errorMsg}`, 'error');
-          result.status = 'failed';
-          result.error = errorMsg;
-          this.broadcastTaskStatus(result);
-          // Skip to next task instead of continuing repeats
-          break;
-        }
-      }
-
-      // Determine final status
-      if (result.status !== 'failed') {
-        result.status = result.completedRepeats === result.totalRepeats ? 'completed' : 'failed';
-        if (result.status === 'failed' && !result.error) {
-          result.error = 'Not all repeats completed';
-        }
-      }
-      this.broadcastTaskStatus(result);
-
-    } catch (error) {
-      result.status = 'failed';
-      result.error = error instanceof Error ? error.message : String(error);
-      this.log(`Task failed: ${result.error}`, 'error');
-      this.broadcastTaskStatus(result);
-    }
-
-    // Always navigate to SBC page at end of task
-    try {
-      await this.sbcNavigator.navigateToSBC();
-    } catch {
-      // Ignore navigation errors
-    }
-
-    return result;
+  async close(): Promise<void> {
+    await this.browserManager.close();
   }
+
+  // ==========================================================================
+  // Public API - Task Execution
+  // ==========================================================================
 
   async runAllTasks(): Promise<TaskResult[]> {
     if (this.isRunning) {
@@ -243,12 +111,12 @@ export class TaskRunner {
         const result = await this.runTask(task, config.squadBuilderRules);
         results.push(result);
 
-        // Go back to SBC main screen for next task
         await this.sbcNavigator.goBack();
-        await this.browserManager.sleep(1000);
+        await this.sleep(CONFIG.DELAYS.AFTER_NAVIGATION);
       }
 
-      this.log(`Completed ${results.filter(r => r.status === 'completed').length}/${enabledTasks.length} tasks`, 'success');
+      const completed = results.filter(r => r.status === 'completed').length;
+      this.log(`Completed ${completed}/${enabledTasks.length} tasks`, 'success');
 
     } catch (error) {
       this.log(`Error running tasks: ${error}`, 'error');
@@ -281,175 +149,340 @@ export class TaskRunner {
   stop(): void {
     this.shouldStop = true;
     this.log('⏹ STOP signal sent - stopping after current action...', 'warning');
-    // Set isRunning to false after a short delay to allow current action to complete
-    setTimeout(() => {
-      this.isRunning = false;
-    }, 500);
+    setTimeout(() => { this.isRunning = false; }, 500);
   }
 
-  private checkStop(result: TaskResult): boolean {
-    if (this.shouldStop) {
-      this.log('Execution stopped by user', 'warning');
-      result.status = 'failed';
-      result.error = 'Stopped by user';
-      this.broadcastTaskStatus(result);
-      return true;
+  getIsRunning(): boolean {
+    return this.isRunning;
+  }
+
+  // ==========================================================================
+  // Main Task Router
+  // ==========================================================================
+
+  private async runTask(task: Task, rules: SquadBuilderRules): Promise<TaskResult> {
+    const result = this.createResult(task);
+
+    if (!task.enabled) {
+      result.status = 'skipped';
+      this.log(`Skipping disabled task: ${task.cardTitle}`);
+      return result;
     }
-    return false;
+
+    result.status = 'running';
+    this.log(`Starting task: ${task.cardTitle}`, 'info');
+
+    try {
+      // Navigate to the SBC card
+      await this.navigateToCard(task);
+
+      // Route to appropriate workflow based on task type
+      if (task.taskType === TaskType.Complex && task.complexConfig) {
+        await this.runComplexTask(task, result);
+      } else {
+        await this.runRegularTask(task, rules, result);
+      }
+
+    } catch (error) {
+      result.status = 'failed';
+      result.error = error instanceof Error ? error.message : String(error);
+      this.log(`Task failed: ${result.error}`, 'error');
+    }
+
+    this.broadcastTaskStatus(result);
+    await this.navigateToSBCSafe();
+
+    return result;
   }
 
-  /**
-   * Enter the squad view for complex tasks - click on challenge row or directly into squad
-   * This is needed before ComplexTaskHandler can work with card slots
-   */
-  private async enterSquadViewForComplexTask(): Promise<void> {
+  // ==========================================================================
+  // Complex Task Workflow (Manual Card Selection)
+  // ==========================================================================
+
+  private async runComplexTask(task: Task, result: TaskResult): Promise<void> {
+    this.log('=== Complex Task Workflow ===', 'info');
+
+    // Enter squad view
+    await this.enterSquadView();
+
+    // Execute complex task handler
+    const handler = new ComplexTaskHandler(this.browserManager, this.log);
+    const success = await handler.execute(task.complexConfig!);
+
+    if (success) {
+      result.status = 'completed';
+      result.completedRepeats = 1;
+      result.totalRepeats = 1;
+      this.log('Complex task completed', 'success');
+
+      await this.sbcNavigator.clickClaimRewards();
+    } else {
+      result.status = 'failed';
+      result.error = 'Complex task failed - could not add all required cards';
+      this.log('Complex task failed', 'error');
+    }
+  }
+
+  // ==========================================================================
+  // Regular Task Workflow (Squad Builder)
+  // ==========================================================================
+
+  private async runRegularTask(task: Task, rules: SquadBuilderRules, result: TaskResult): Promise<void> {
+    this.log('=== Regular Task Workflow (Squad Builder) ===', 'info');
+
+    // Get repeat count
+    const repeatCount = await this.getRepeatCount(task, result);
+    if (repeatCount === 0) return; // Task skipped
+
+    result.totalRepeats = repeatCount;
+    this.broadcastTaskStatus(result);
+
+    // Initial setup: enter sub-challenge and clear squad
+    await this.enterSubChallengeIfExists();
+    await this.handleClearSquad();
+
+    // Execute repeats
+    for (let i = 0; i < repeatCount; i++) {
+      if (this.shouldStop) {
+        this.setStoppedByUser(result);
+        return;
+      }
+
+      this.log(`=== Repeat ${i + 1}/${repeatCount} ===`, 'info');
+
+      try {
+        await this.withTimeout(
+          this.executeSquadBuilderRepeat(task, rules, i),
+          CONFIG.TIMEOUTS.TASK_REPEAT,
+          `Timeout: repeat ${i + 1} exceeded ${CONFIG.TIMEOUTS.TASK_REPEAT / 1000}s`
+        );
+
+        result.completedRepeats++;
+        this.log(`✓ Completed ${result.completedRepeats}/${repeatCount}`, 'success');
+        this.broadcastTaskStatus(result);
+
+        // Navigate back for next repeat
+        if (i < repeatCount - 1) {
+          await this.sbcNavigator.navigateToSBC();
+          await this.sleep(CONFIG.DELAYS.AFTER_NAVIGATION);
+        }
+
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.log(`✗ Repeat ${i + 1} failed: ${errorMsg}`, 'error');
+        result.status = 'failed';
+        result.error = errorMsg;
+        return;
+      }
+    }
+
+    // Finalize result
+    result.status = result.completedRepeats === repeatCount ? 'completed' : 'failed';
+    if (result.status === 'failed' && !result.error) {
+      result.error = 'Not all repeats completed';
+    }
+  }
+
+  private async executeSquadBuilderRepeat(task: Task, rules: SquadBuilderRules, repeatIndex: number): Promise<void> {
+    // For subsequent repeats, navigate back to card
+    if (repeatIndex > 0) {
+      await this.navigateBackToCard(task);
+      await this.enterSubChallengeIfExists();
+    }
+
+    this.throwIfStopped();
+
+    // Check if already completed
+    if (await this.sbcNavigator.isCardCompleted()) {
+      this.log('Card already completed!', 'success');
+      return;
+    }
+
+    // Open Squad Builder
+    const opened = await this.sbcNavigator.clickUseSquadBuilder();
+    if (!opened) throw new Error('Could not open squad builder');
+
+    this.throwIfStopped();
+
+    // Build squad using filters from config
+    const squadBuilder = new SquadBuilder(this.browserManager, rules, this.log, task.squadBuilderFilters);
+    await squadBuilder.buildSquad();
+
+    this.throwIfStopped();
+
+    // Exchange - if button enabled, requirements were met
+    const exchangeSuccess = await this.sbcNavigator.clickExchangePlayers();
+    if (!exchangeSuccess) throw new Error('Exchange Players button disabled - requirements not met');
+
+    this.throwIfStopped();
+
+    await this.sbcNavigator.clickClaimRewards();
+  }
+
+  // ==========================================================================
+  // Navigation Helpers
+  // ==========================================================================
+
+  private async navigateToCard(task: Task): Promise<void> {
+    await this.sbcNavigator.navigateToSBC();
+    await this.sbcNavigator.selectCategory(task.category);
+
+    const found = await this.sbcNavigator.findAndClickCard(task.cardTitle);
+    if (!found) {
+      throw new Error(`Card not found: ${task.cardTitle}`);
+    }
+  }
+
+  private async navigateBackToCard(task: Task): Promise<void> {
+    this.log('Navigating back to card...');
+    await this.sbcNavigator.selectCategory(task.category);
+
+    this.throwIfStopped();
+
+    const found = await this.sbcNavigator.findAndClickCard(task.cardTitle);
+    if (!found) throw new Error(`Card not found: ${task.cardTitle}`);
+  }
+
+  private async navigateToSBCSafe(): Promise<void> {
+    try {
+      await this.sbcNavigator.navigateToSBC();
+    } catch {
+      // Ignore navigation errors
+    }
+  }
+
+  private async enterSubChallengeIfExists(): Promise<void> {
     const page = this.browserManager.getPage();
+    const challengeSlot = page.locator(CONFIG.SELECTORS.CHALLENGE_ROW).first();
 
-    this.log('Entering squad view for complex task...');
-    await this.browserManager.sleep(1000);
+    if (await challengeSlot.isVisible({ timeout: 1000 }).catch(() => false)) {
+      this.log('Found sub-challenge, clicking...', 'info');
+      await challengeSlot.click();
+      await this.sleep(CONFIG.DELAYS.AFTER_CLICK);
+    }
+  }
 
-    // Check if we're already on the squad view (empty card slots visible)
-    const emptySlot = page.locator('div.ut-item-loading.empty, div.item.empty.droppable').first();
+  private async enterSquadView(): Promise<void> {
+    const page = this.browserManager.getPage();
+    this.log('Entering squad view...');
+    await this.sleep(CONFIG.DELAYS.AFTER_CLICK);
+
+    // Check if already on squad view
+    const emptySlot = page.locator(CONFIG.SELECTORS.EMPTY_SLOT).first();
     if (await emptySlot.isVisible({ timeout: 1000 }).catch(() => false)) {
       this.log('Already on squad view');
       return;
     }
 
-    // Try clicking on a challenge row to enter squad view
-    const challengeRowSelectors = [
-      '.ut-sbc-challenge-table-row-view',
-      '[class*="challenge-row"]',
-      '.ut-sbc-set-tile-view',
-      '.sbc-challenge',
-    ];
+    // Try clicking challenge row
+    await this.enterSubChallengeIfExists();
 
-    for (const selector of challengeRowSelectors) {
-      const row = page.locator(selector).first();
-      if (await row.isVisible({ timeout: 500 }).catch(() => false)) {
-        this.log(`Clicking challenge row (${selector})...`);
-        await row.click();
-        await this.browserManager.sleep(1500);
-
-        // Check if squad view appeared
-        if (await emptySlot.isVisible({ timeout: 2000 }).catch(() => false)) {
-          this.log('Entered squad view');
-          return;
-        }
-      }
+    // Check again
+    if (await emptySlot.isVisible({ timeout: 2000 }).catch(() => false)) {
+      this.log('Entered squad view');
+      return;
     }
 
-    // Try clicking "Build Challenge" or similar button
-    const buildBtnSelectors = [
-      'button:has-text("Build")',
-      'button:has-text("Start")',
-      '.call-to-action',
-    ];
-
-    for (const selector of buildBtnSelectors) {
+    // Try Build/Start button
+    const buildSelectors = ['button:has-text("Build")', 'button:has-text("Start")', '.call-to-action'];
+    for (const selector of buildSelectors) {
       const btn = page.locator(selector).first();
       if (await btn.isVisible({ timeout: 500 }).catch(() => false)) {
         const text = await btn.textContent().catch(() => '') || '';
         if (text.toLowerCase().includes('build') || text.toLowerCase().includes('start')) {
           this.log(`Clicking "${text.trim()}"...`);
           await btn.click();
-          await this.browserManager.sleep(1500);
+          await this.sleep(CONFIG.DELAYS.AFTER_CLICK);
           return;
         }
       }
     }
 
-    this.log('Could not find challenge row or build button, assuming already on squad view', 'warning');
+    this.log('Assuming already on squad view', 'warning');
   }
 
-  private async executeRepeat(task: Task, rules: SquadBuilderRules, result: TaskResult, repeatIndex: number, repeatCount: number): Promise<void> {
-    // For repeats after the first one, navigate to card again
-    if (repeatIndex > 0) {
-      if (this.shouldStop) throw new Error('Stopped by user');
+  // ==========================================================================
+  // Clear Squad
+  // ==========================================================================
 
-      this.log('Starting next repeat...');
-      await this.sbcNavigator.selectCategory(task.category);
-      if (this.shouldStop) throw new Error('Stopped by user');
+  private async handleClearSquad(): Promise<void> {
+    if (!this.ui) return;
+    await this.ui.handleClearSquad(CONFIG.DELAYS.AFTER_CLEAR_SQUAD);
+  }
 
-      const cardFound = await this.sbcNavigator.findAndClickCard(task.cardTitle);
-      if (this.shouldStop) throw new Error('Stopped by user');
-      if (!cardFound) {
-        throw new Error(`Card not found: ${task.cardTitle}`);
+  // ==========================================================================
+  // Repeat Count
+  // ==========================================================================
+
+  private async getRepeatCount(task: Task, result: TaskResult): Promise<number> {
+    let repeatCount = task.repeatCount;
+
+    if (task.taskType === 'daily') {
+      const pageCount = await this.sbcNavigator.getRepeatCountFromPage();
+
+      if (pageCount !== null) {
+        if (pageCount === 0) {
+          this.log(`Task "${task.cardTitle}" has 0 repeats available - skipping`, 'warning');
+          result.status = 'skipped';
+          result.totalRepeats = 0;
+          this.broadcastTaskStatus(result);
+          return 0;
+        }
+        repeatCount = pageCount;
+        this.log(`Using repeat count from page: ${repeatCount}`, 'info');
+      } else {
+        this.log(`Using repeat count from config: ${repeatCount}`, 'info');
       }
     }
 
-    if (this.shouldStop) throw new Error('Stopped by user');
+    return repeatCount;
+  }
 
-    // Check if card is completed (non-repeatable)
-    if (await this.sbcNavigator.isCardCompleted()) {
-      this.log('Card already completed!', 'success');
-      result.completedRepeats = repeatCount;
-      return;
+  // ==========================================================================
+  // Utilities
+  // ==========================================================================
+
+  private createResult(task: Task): TaskResult {
+    return {
+      taskId: task.id,
+      status: 'pending',
+      completedRepeats: 0,
+      totalRepeats: task.repeatCount,
+    };
+  }
+
+  private broadcastTaskStatus(result: TaskResult): void {
+    this.onTaskStatus?.(result);
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMsg: string): Promise<T> {
+    let timeoutId: NodeJS.Timeout;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(errorMsg)), timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      clearTimeout(timeoutId!);
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutId!);
+      throw error;
     }
+  }
 
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    // Click Use Squad Builder
-    let squadBuilderOpened = await this.sbcNavigator.clickUseSquadBuilder();
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    if (!squadBuilderOpened) {
-      this.log('Trying to find sub-challenge...', 'warning');
-      await this.browserManager.sleep(500);
-      if (this.shouldStop) throw new Error('Stopped by user');
-
-      const page = this.browserManager.getPage();
-      const challengeSlot = page.locator('.ut-sbc-challenge-table-row-view, [class*="challenge-row"]').first();
-      if (await challengeSlot.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await challengeSlot.click();
-        await this.browserManager.sleep(500);
-        if (this.shouldStop) throw new Error('Stopped by user');
-        squadBuilderOpened = await this.sbcNavigator.clickUseSquadBuilder();
-      }
-    }
-
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    if (!squadBuilderOpened) {
-      throw new Error('Could not open squad builder');
-    }
-
-    // Create squad builder and parse requirements
-    const squadBuilder = new SquadBuilder(this.browserManager, rules, this.log);
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    const requirements = await squadBuilder.parseRequirements();
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    // Build the squad
-    const buildSuccess = await squadBuilder.buildSquad(requirements);
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    if (!buildSuccess) {
-      throw new Error('Could not meet all requirements');
-    }
-
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    // Exchange players
-    const exchangeSuccess = await this.sbcNavigator.clickExchangePlayers();
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    if (!exchangeSuccess) {
-      throw new Error('Exchange Players button disabled or not found');
-    }
-
-    if (this.shouldStop) throw new Error('Stopped by user');
-
-    // Claim rewards
-    await this.sbcNavigator.clickClaimRewards();
+  private throwIfStopped(): void {
     if (this.shouldStop) throw new Error('Stopped by user');
   }
 
-  async close(): Promise<void> {
-    await this.browserManager.close();
+  private setStoppedByUser(result: TaskResult): void {
+    this.log('Execution stopped by user', 'warning');
+    result.status = 'failed';
+    result.error = 'Stopped by user';
+    this.broadcastTaskStatus(result);
   }
 
-  getIsRunning(): boolean {
-    return this.isRunning;
+  private async sleep(ms: number): Promise<void> {
+    await this.browserManager.sleep(ms);
   }
 }

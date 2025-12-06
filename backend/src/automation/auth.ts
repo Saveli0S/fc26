@@ -1,10 +1,138 @@
-import { Page } from 'playwright';
+import { Page, Frame } from 'playwright';
 import { BrowserManager, LogCallback } from './browser.js';
 import 'dotenv/config';
 
-const EA_WEB_APP_URL = process.env.EA_WEB_APP_URL || 'https://www.ea.com/ru-ru/ea-sports-fc/ultimate-team/web-app/';
-const EA_EMAIL = process.env.EA_EMAIL || '';
-const EA_PASSWORD = process.env.EA_PASSWORD || '';
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const CONFIG = {
+  EA_WEB_APP_URL: process.env.EA_WEB_APP_URL || 'https://www.ea.com/ru-ru/ea-sports-fc/ultimate-team/web-app/',
+  EA_EMAIL: process.env.EA_EMAIL || '',
+  EA_PASSWORD: process.env.EA_PASSWORD || '',
+  TIMEOUTS: {
+    PAGE_LOAD: 6000,
+    ELEMENT_VISIBLE: 2000,
+    ELEMENT_VISIBLE_LONG: 5000,
+    APP_LOAD: 60000,
+    TWO_FA: 5 * 60 * 1000, // 5 minutes
+  },
+  DELAYS: {
+    SHORT: 500,
+    MEDIUM: 2000,
+    LONG: 3000,
+  },
+};
+
+// ============================================================================
+// Selectors
+// ============================================================================
+
+const SELECTORS = {
+  // App loaded indicators
+  APP_LOADED: [
+    '.ut-navigation-container-view',
+    '.ut-home-view',
+    '.ut-navigation-bar-view',
+    '[class*="UTNavigationBar"]',
+    '[class*="NavigationBar"]',
+  ],
+
+  // Splash screen login button
+  SPLASH_LOGIN: [
+    'button:has-text("Login")',
+    'button:has-text("Sign In")',
+    'button:has-text("Log In")',
+    'button:has-text("Войти")',
+    'a:has-text("Login")',
+    '.btn-login',
+    '[class*="login-btn"]',
+    'button.btn-standard.call-to-action',
+    'button[class*="call-to-action"]',
+    '.ut-login-button',
+  ],
+
+  // Email input field
+  EMAIL_INPUT: [
+    '#email',
+    'input[name="email"]',
+    'input[type="email"]',
+    '#signInEmailField',
+    'input[placeholder*="email" i]',
+    'input[placeholder*="Email" i]',
+  ],
+
+  // Password input field
+  PASSWORD_INPUT: [
+    '#password',
+    'input[name="password"]',
+    'input[type="password"]',
+    '#signInPasswordField',
+    'input[placeholder*="password" i]',
+    'input[placeholder*="Password" i]',
+  ],
+
+  // Next/Continue button
+  NEXT_BUTTON: [
+    'button:has-text("Next")',
+    'button:has-text("Далее")',
+    'button:has-text("Continue")',
+    'button[type="submit"]',
+    '#btnNext',
+    '.btn-next',
+    'button.primary',
+  ],
+
+  // Submit/Sign In button
+  SUBMIT_BUTTON: [
+    'button:has-text("Next")',
+    'button:has-text("Sign in")',
+    'button:has-text("Sign In")',
+    'button:has-text("Log In")',
+    'button:has-text("Login")',
+    'button:has-text("Далее")',
+    'button:has-text("Войти")',
+    'button[type="submit"]',
+    '#logInBtn',
+    'input[type="submit"]',
+    '.otkbtn-primary',
+    'button.primary',
+  ],
+
+  // Verification screen indicators
+  VERIFICATION: [
+    'text="Verify your identity"',
+    'text="Send Code"',
+    'text="SEND CODE"',
+    'button:has-text("Send Code")',
+    'button:has-text("SEND CODE")',
+    'text="verification code"',
+    'text="Подтвердите"',
+  ],
+
+  // Send code button
+  SEND_CODE: [
+    'button:has-text("Send Code")',
+    'button:has-text("SEND CODE")',
+    'button:has-text("Отправить код")',
+    'a:has-text("Send Code")',
+  ],
+
+  // 2FA code input
+  TWO_FA_INPUT: [
+    'input[name="codeInput"]',
+    'input[name="twoFactorCode"]',
+    '#twoFactorCode',
+    'input[name="oneTimeCode"]',
+    'input[placeholder*="code" i]',
+    'input[type="text"][maxlength="6"]',
+    'input[type="tel"]',
+  ],
+};
+
+// ============================================================================
+// AuthManager Class
+// ============================================================================
 
 export class AuthManager {
   private browserManager: BrowserManager;
@@ -15,411 +143,274 @@ export class AuthManager {
     this.log = logCallback || ((msg) => console.log(msg));
   }
 
+  // ==========================================================================
+  // Public Methods
+  // ==========================================================================
+
   async login(): Promise<boolean> {
     const page = this.browserManager.getPage();
 
     this.log('Navigating to EA Web App...');
-    await page.goto(EA_WEB_APP_URL, { waitUntil: 'networkidle', timeout: 6000 });
+    await page.goto(CONFIG.EA_WEB_APP_URL, {
+      waitUntil: 'networkidle',
+      timeout: CONFIG.TIMEOUTS.PAGE_LOAD,
+    });
 
-    // Wait for page to load
-    await this.browserManager.sleep(3000);
+    await this.sleep(CONFIG.DELAYS.LONG);
 
-    // Check if already logged in by looking for the main app container
-    const isLoggedIn = await this.checkIfLoggedIn(page);
-    if (isLoggedIn) {
+    if (await this.isLoggedIn(page)) {
       this.log('Already logged in!', 'success');
       return true;
     }
 
-    // Handle login flow
     return await this.performLogin(page);
   }
 
-  private async checkIfLoggedIn(page: Page): Promise<boolean> {
-    try {
-      // Check for main app elements that indicate we're logged in
-      const selectors = [
-        '.ut-navigation-container-view', // Main navigation
-        '.ut-home-view', // Home view
-        '[class*="NavigationBar"]',
-        '.ut-click-shield', // Loading shield is gone
-      ];
-
-      for (const selector of selectors) {
-        if (await page.isVisible(selector)) {
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return false;
-    }
+  async ensureLoggedIn(): Promise<boolean> {
+    const page = this.browserManager.getPage();
+    return (await this.isLoggedIn(page)) || (await this.login());
   }
+
+  // ==========================================================================
+  // Login Flow
+  // ==========================================================================
 
   private async performLogin(page: Page): Promise<boolean> {
     try {
-      this.log('Looking for Login button on splash screen...');
+      // Step 1: Click splash login button
+      await this.clickSplashLoginButton(page);
 
-      // Step 1: Click the initial "Login" button on splash screen
-      const splashLoginSelectors = [
-        'button:has-text("Login")',
-        'a:has-text("Login")',
-        '.btn-login',
-        '[class*="login-btn"]',
-        'button.btn-standard.call-to-action',
-        'button[class*="call-to-action"]',
-        '.ut-login-button',
-        'button:has-text("Войти")',
-        'button:has-text("Sign In")',
-        'button:has-text("Log In")',
-      ];
+      // Step 2: Find login form (may be in iframe)
+      const loginFrame = await this.findLoginFrame(page);
 
-      let loginButtonFound = false;
-      for (const selector of splashLoginSelectors) {
-        try {
-          const element = page.locator(selector).first();
-          if (await element.isVisible({ timeout: 2000 })) {
-            await element.click();
-            loginButtonFound = true;
-            this.log('Clicked Login button on splash screen', 'success');
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
+      // Step 3: Fill email and submit
+      await this.fillEmail(loginFrame);
+      await this.clickNextButton(loginFrame);
 
-      if (!loginButtonFound) {
-        // Try clicking by text directly
-        try {
-          await page.getByText('Login', { exact: true }).click();
-          loginButtonFound = true;
-          this.log('Clicked Login button', 'success');
-        } catch {
-          this.log('No splash login button found, checking for login form...', 'warning');
-        }
-      }
+      // Step 4: Fill password and submit
+      await this.fillPassword(loginFrame);
+      await this.clickSubmitButton(loginFrame);
 
-      // Wait for EA login form to appear
-      this.log('Waiting for EA login form...');
-      await this.browserManager.sleep(3000);
+      // Step 5: Handle verification if needed
+      await this.handleVerificationIfNeeded(page);
 
-      // Step 2: Handle EA Account login form (may be in iframe)
-      // First check if there's an iframe
-      const frames = page.frames();
-      let loginFrame = page;
+      // Step 6: Handle 2FA if needed
+      await this.handle2FAIfNeeded(page);
 
-      for (const frame of frames) {
-        try {
-          const emailField = frame.locator('#email, input[name="email"]').first();
-          if (await emailField.isVisible({ timeout: 1000 })) {
-            loginFrame = frame as any;
-            this.log('Found login form in iframe');
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      // Step 3: Fill email
-      const emailSelectors = [
-        '#email',
-        'input[name="email"]',
-        'input[type="email"]',
-        '#signInEmailField',
-        'input[placeholder*="email" i]',
-        'input[placeholder*="Email" i]',
-      ];
-
-      let emailFilled = false;
-      for (const selector of emailSelectors) {
-        try {
-          const emailInput = loginFrame.locator(selector).first();
-          if (await emailInput.isVisible({ timeout: 5000 })) {
-            await emailInput.click();
-            await emailInput.fill(EA_EMAIL);
-            emailFilled = true;
-            this.log(`Filled email: ${EA_EMAIL}`, 'success');
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (!emailFilled) {
-        this.log('Could not find email input field', 'error');
-        return false;
-      }
-
-      await this.browserManager.sleep(500);
-
-      // Step 4: Click "Next" button after email
-      const nextButtonSelectors = [
-        'button:has-text("Next")',
-        'button:has-text("Далее")',
-        'button:has-text("Continue")',
-        'button[type="submit"]',
-        '#btnNext',
-        '.btn-next',
-        'button.primary',
-      ];
-
-      let nextClicked = false;
-      for (const selector of nextButtonSelectors) {
-        try {
-          const nextBtn = loginFrame.locator(selector).first();
-          if (await nextBtn.isVisible({ timeout: 2000 })) {
-            await nextBtn.click();
-            nextClicked = true;
-            this.log('Clicked Next after email', 'success');
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (!nextClicked) {
-        await page.keyboard.press('Enter');
-        this.log('Pressed Enter after email');
-      }
-
-      // Wait for password field to appear
-      await this.browserManager.sleep(2000);
-
-      // Step 5: Fill password
-      const passwordSelectors = [
-        '#password',
-        'input[name="password"]',
-        'input[type="password"]',
-        '#signInPasswordField',
-        'input[placeholder*="password" i]',
-        'input[placeholder*="Password" i]',
-      ];
-
-      let passwordFilled = false;
-      for (const selector of passwordSelectors) {
-        try {
-          const passwordInput = loginFrame.locator(selector).first();
-          if (await passwordInput.isVisible({ timeout: 5000 })) {
-            await passwordInput.click();
-            await passwordInput.fill(EA_PASSWORD);
-            passwordFilled = true;
-            this.log('Filled password', 'success');
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (!passwordFilled) {
-        this.log('Could not find password input field', 'error');
-        return false;
-      }
-
-      await this.browserManager.sleep(500);
-
-      // Step 6: Click "Next" or "Sign In" button after password
-      const submitSelectors = [
-        'button:has-text("Next")',
-        'button:has-text("Sign in")',
-        'button:has-text("Sign In")',
-        'button:has-text("Log In")',
-        'button:has-text("Login")',
-        'button:has-text("Далее")',
-        'button:has-text("Войти")',
-        'button[type="submit"]',
-        '#logInBtn',
-        'input[type="submit"]',
-        '.otkbtn-primary',
-        'button.primary',
-      ];
-
-      let submitted = false;
-      for (const selector of submitSelectors) {
-        try {
-          const submitBtn = loginFrame.locator(selector).first();
-          if (await submitBtn.isVisible({ timeout: 2000 })) {
-            await submitBtn.click();
-            submitted = true;
-            this.log('Clicked Next/Sign In after password', 'success');
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (!submitted) {
-        await page.keyboard.press('Enter');
-        this.log('Pressed Enter to submit');
-      }
-
-      // Wait for potential verification
-      await this.browserManager.sleep(3000);
-
-      // Check for "Verify your identity" / "Send Code" screen
-      const needsVerification = await this.checkVerificationScreen(page);
-      if (needsVerification) {
-        await this.handleVerificationScreen(page);
-      }
-
-      // Check for 2FA code input
-      const needs2FA = await this.check2FA(page);
-      if (needs2FA) {
-        this.log('2FA code input detected! Please enter code manually...', 'warning');
-        await this.waitFor2FACompletion(page);
-      }
-
-      // Wait for app to load after login
-      this.log('Waiting for app to load...');
+      // Step 7: Wait for app to load
       await this.waitForAppLoad(page);
 
-      // Save session - important for avoiding re-verification next time!
+      // Step 8: Save session
       await this.browserManager.saveCookies();
-
       this.log('Login successful! Session saved.', 'success');
-      return true;
 
+      return true;
     } catch (error) {
       this.log(`Login failed: ${error}`, 'error');
       return false;
     }
   }
 
-  private async checkVerificationScreen(page: Page): Promise<boolean> {
-    // Check for "Verify your identity" / "Send Code" screen
-    const verificationIndicators = [
-      'text="Verify your identity"',
-      'text="Send Code"',
-      'text="SEND CODE"',
-      'button:has-text("Send Code")',
-      'button:has-text("SEND CODE")',
-      'text="verification code"',
-      'text="Подтвердите"',
-    ];
+  // ==========================================================================
+  // Login Steps
+  // ==========================================================================
 
-    for (const selector of verificationIndicators) {
+  private async clickSplashLoginButton(page: Page): Promise<void> {
+    this.log('Looking for Login button on splash screen...');
+
+    const clicked = await this.tryClickSelectors(page, SELECTORS.SPLASH_LOGIN);
+
+    if (clicked) {
+      this.log('Clicked Login button on splash screen', 'success');
+    } else {
+      // Fallback: try exact text
       try {
-        if (await page.locator(selector).first().isVisible({ timeout: 1000 })) {
-          return true;
-        }
+        await page.getByText('Login', { exact: true }).click();
+        this.log('Clicked Login button', 'success');
       } catch {
-        continue;
+        this.log('No splash login button found, checking for login form...', 'warning');
       }
     }
-    return false;
+
+    await this.sleep(CONFIG.DELAYS.LONG);
   }
 
-  private async handleVerificationScreen(page: Page): Promise<void> {
-    this.log('Verification screen detected - clicking "Send Code"...', 'warning');
+  private async findLoginFrame(page: Page): Promise<Page | Frame> {
+    this.log('Waiting for EA login form...');
 
-    // Click "Send Code" button
-    const sendCodeSelectors = [
-      'button:has-text("Send Code")',
-      'button:has-text("SEND CODE")',
-      'button:has-text("Отправить код")',
-      'a:has-text("Send Code")',
-    ];
-
-    for (const selector of sendCodeSelectors) {
-      try {
-        const btn = page.locator(selector).first();
-        if (await btn.isVisible({ timeout: 2000 })) {
-          await btn.click();
-          this.log('Clicked "Send Code" - check your email!', 'warning');
-          break;
-        }
-      } catch {
-        continue;
+    for (const frame of page.frames()) {
+      const emailField = frame.locator(SELECTORS.EMAIL_INPUT[0]).first();
+      if (await emailField.isVisible({ timeout: 1000 }).catch(() => false)) {
+        this.log('Found login form in iframe');
+        return frame;
       }
     }
 
-    // Wait for code input to appear and user to complete
-    this.log('Waiting for you to enter the verification code from email...', 'warning');
-    await this.browserManager.sleep(3000);
+    return page;
   }
 
-  private async check2FA(page: Page): Promise<boolean> {
-    const twoFASelectors = [
-      'input[name="codeInput"]',
-      'input[name="twoFactorCode"]',
-      '#twoFactorCode',
-      'input[name="oneTimeCode"]',
-      'input[placeholder*="code" i]',
-      'input[type="text"][maxlength="6"]',
-      'input[type="tel"]',
-    ];
+  private async fillEmail(frame: Page | Frame): Promise<void> {
+    const filled = await this.tryFillInput(frame, SELECTORS.EMAIL_INPUT, CONFIG.EA_EMAIL);
 
-    for (const selector of twoFASelectors) {
-      try {
-        if (await page.locator(selector).first().isVisible({ timeout: 1000 })) {
-          return true;
-        }
-      } catch {
-        continue;
-      }
+    if (filled) {
+      this.log(`Filled email: ${CONFIG.EA_EMAIL}`, 'success');
+    } else {
+      throw new Error('Could not find email input field');
     }
-    return false;
+
+    await this.sleep(CONFIG.DELAYS.SHORT);
+  }
+
+  private async clickNextButton(frame: Page | Frame): Promise<void> {
+    const clicked = await this.tryClickSelectors(frame, SELECTORS.NEXT_BUTTON);
+
+    if (clicked) {
+      this.log('Clicked Next after email', 'success');
+    } else {
+      await frame.locator('body').press('Enter');
+      this.log('Pressed Enter after email');
+    }
+
+    await this.sleep(CONFIG.DELAYS.MEDIUM);
+  }
+
+  private async fillPassword(frame: Page | Frame): Promise<void> {
+    const filled = await this.tryFillInput(frame, SELECTORS.PASSWORD_INPUT, CONFIG.EA_PASSWORD);
+
+    if (filled) {
+      this.log('Filled password', 'success');
+    } else {
+      throw new Error('Could not find password input field');
+    }
+
+    await this.sleep(CONFIG.DELAYS.SHORT);
+  }
+
+  private async clickSubmitButton(frame: Page | Frame): Promise<void> {
+    const clicked = await this.tryClickSelectors(frame, SELECTORS.SUBMIT_BUTTON);
+
+    if (clicked) {
+      this.log('Clicked Sign In', 'success');
+    } else {
+      await frame.locator('body').press('Enter');
+      this.log('Pressed Enter to submit');
+    }
+
+    await this.sleep(CONFIG.DELAYS.LONG);
+  }
+
+  // ==========================================================================
+  // Verification & 2FA
+  // ==========================================================================
+
+  private async handleVerificationIfNeeded(page: Page): Promise<void> {
+    if (await this.isVisible(page, SELECTORS.VERIFICATION)) {
+      this.log('Verification screen detected - clicking "Send Code"...', 'warning');
+
+      await this.tryClickSelectors(page, SELECTORS.SEND_CODE);
+      this.log('Clicked "Send Code" - check your email!', 'warning');
+      this.log('Waiting for you to enter the verification code...', 'warning');
+
+      await this.sleep(CONFIG.DELAYS.LONG);
+    }
+  }
+
+  private async handle2FAIfNeeded(page: Page): Promise<void> {
+    if (await this.isVisible(page, SELECTORS.TWO_FA_INPUT)) {
+      this.log('2FA code input detected! Please enter code manually...', 'warning');
+      await this.waitFor2FACompletion(page);
+    }
   }
 
   private async waitFor2FACompletion(page: Page): Promise<void> {
     this.log('Waiting for 2FA completion (max 5 minutes)...', 'warning');
 
-    const maxWait = 5 * 60 * 1000; // 5 minutes
     const startTime = Date.now();
 
-    while (Date.now() - startTime < maxWait) {
-      const is2FA = await this.check2FA(page);
-      if (!is2FA) {
+    while (Date.now() - startTime < CONFIG.TIMEOUTS.TWO_FA) {
+      if (!(await this.isVisible(page, SELECTORS.TWO_FA_INPUT))) {
         this.log('2FA completed!', 'success');
         return;
       }
-      await this.browserManager.sleep(2000);
+      await this.sleep(CONFIG.DELAYS.MEDIUM);
     }
 
     throw new Error('2FA timeout - please complete verification faster next time');
   }
 
-  private async waitForAppLoad(page: Page, timeout = 60000): Promise<void> {
+  // ==========================================================================
+  // State Checks
+  // ==========================================================================
+
+  private async isLoggedIn(page: Page): Promise<boolean> {
+    return await this.isVisible(page, SELECTORS.APP_LOADED);
+  }
+
+  private async waitForAppLoad(page: Page): Promise<void> {
+    this.log('Waiting for app to load...');
+
     const startTime = Date.now();
 
-    while (Date.now() - startTime < timeout) {
-      // Check for various app loaded indicators
-      const appSelectors = [
-        '.ut-navigation-container-view',
-        '.ut-home-view',
-        '.ut-navigation-bar-view',
-        '[class*="UTNavigationBar"]',
-      ];
-
-      for (const selector of appSelectors) {
-        try {
-          if (await page.isVisible(selector)) {
-            this.log('App loaded successfully');
-            return;
-          }
-        } catch {
-          continue;
-        }
+    while (Date.now() - startTime < CONFIG.TIMEOUTS.APP_LOAD) {
+      if (await this.isVisible(page, SELECTORS.APP_LOADED)) {
+        this.log('App loaded successfully');
+        return;
       }
-
-      await this.browserManager.sleep(2000);
+      await this.sleep(CONFIG.DELAYS.MEDIUM);
     }
 
     throw new Error('App failed to load within timeout');
   }
 
-  async ensureLoggedIn(): Promise<boolean> {
-    const page = this.browserManager.getPage();
+  // ==========================================================================
+  // Helper Methods
+  // ==========================================================================
 
-    if (await this.checkIfLoggedIn(page)) {
-      return true;
+  private async tryClickSelectors(context: Page | Frame, selectors: string[]): Promise<boolean> {
+    for (const selector of selectors) {
+      try {
+        const element = context.locator(selector).first();
+        if (await element.isVisible({ timeout: CONFIG.TIMEOUTS.ELEMENT_VISIBLE })) {
+          await element.click();
+          return true;
+        }
+      } catch {
+        continue;
+      }
     }
+    return false;
+  }
 
-    return await this.login();
+  private async tryFillInput(context: Page | Frame, selectors: string[], value: string): Promise<boolean> {
+    for (const selector of selectors) {
+      try {
+        const input = context.locator(selector).first();
+        if (await input.isVisible({ timeout: CONFIG.TIMEOUTS.ELEMENT_VISIBLE_LONG })) {
+          await input.click();
+          await input.fill(value);
+          return true;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return false;
+  }
+
+  private async isVisible(context: Page | Frame, selectors: string[]): Promise<boolean> {
+    for (const selector of selectors) {
+      try {
+        if (await context.locator(selector).first().isVisible({ timeout: 1000 })) {
+          return true;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return false;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await this.browserManager.sleep(ms);
   }
 }

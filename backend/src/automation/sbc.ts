@@ -1,66 +1,139 @@
-import { Page } from 'playwright';
 import { BrowserManager, LogCallback } from './browser.js';
-import { Task } from '../config/tasks.js';
+import { UIHelper, TIMEOUTS, DELAYS } from './ui-helpers.js';
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const CONFIG = {
+  MAX_SCROLL_ATTEMPTS: 10,
+  REWARD_DIALOG_RETRIES: 5,
+};
+
+// ============================================================================
+// Selectors
+// ============================================================================
+
+const SELECTORS = {
+  // Navigation
+  SBC_MENU: [
+    '.ut-tab-bar-item:has-text("SBC")',
+    'button.ut-tab-bar-item:has(span.ut-tab-bar-item-icon--sbc)',
+    '[class*="sbc"]',
+    'button:has-text("SBC")',
+    '.icon-sbc',
+  ],
+
+  BACK_BUTTON: [
+    '.ut-navigation-button-control',
+    'button.ut-navigation-button-control',
+    '[class*="back"]',
+    '.ut-back-button',
+  ],
+
+  // Card tiles
+  CARD_TITLE: 'h1.tileTitle, .tileTitle, .ut-sbc-set-tile-view--title',
+  CARD_TILE: 'div[class*="ut-sbc-set-tile-view"]',
+
+  // Status
+  COMPLETED: [
+    '.ut-sbc-challenge-status--complete',
+    '.completed',
+    '[class*="complete"]',
+    '.checkmark',
+    'svg.complete-icon',
+  ],
+
+  REPEATABLE_LABEL: [
+    '.ut-squad-building-set-status-label-view.repeat',
+    '.ut-squad-building-set-status-label-view.repeat span.text',
+    '.ut-squad-building-set-status-label-view span.text',
+    '.ut-squad-building-set-status-label-view',
+    '[class*="status-label"]',
+    'span.text:has-text("Repeatable")',
+  ],
+
+  // Buttons
+  USE_SQUAD_BUILDER: [
+    'button:has-text("Use Squad Builder")',
+    'button:has-text("Использовать конструктор")',
+    '.ut-squad-builder-btn',
+    '[class*="squad-builder"]',
+    'button.call-to-action',
+  ],
+
+  EXCHANGE_PLAYERS: [
+    'button:has-text("Exchange Players")',
+    'button:has-text("Обменять игроков")',
+    'button:has-text("Submit")',
+    '.ut-sbc-submit-btn',
+    'button.call-to-action:has-text("Exchange")',
+  ],
+
+  CLAIM_REWARDS: [
+    'button:has-text("Claim Rewards")',
+    'button:has-text("Claim")',
+    'button:has-text("Получить награды")',
+    'button:has-text("Получить")',
+    '.ut-sbc-rewards-btn',
+    'button.call-to-action',
+  ],
+
+  DIALOG_BUTTONS: [
+    'button:has-text("OK")',
+    'button:has-text("Continue")',
+    'button:has-text("Продолжить")',
+    '.ut-button-group button',
+    '.dialog-body button',
+  ],
+};
+
+// ============================================================================
+// SBCNavigator Class
+// ============================================================================
 
 export class SBCNavigator {
   private browserManager: BrowserManager;
   private log: LogCallback;
+  private ui: UIHelper;
 
   constructor(browserManager: BrowserManager, logCallback?: LogCallback) {
     this.browserManager = browserManager;
     this.log = logCallback || ((msg) => console.log(msg));
+    this.ui = new UIHelper(browserManager, this.log);
   }
+
+  // ==========================================================================
+  // Navigation
+  // ==========================================================================
 
   async navigateToSBC(): Promise<void> {
     const page = this.browserManager.getPage();
-
     this.log('Navigating to SBC...');
 
-    // Click on SBC in the navigation menu
-    const sbcSelectors = [
-      '.ut-tab-bar-item:has-text("SBC")',
-      'button.ut-tab-bar-item:has(span.ut-tab-bar-item-icon--sbc)',
-      '[class*="sbc"]',
-      'button:has-text("SBC")',
-    ];
-
-    let clicked = false;
-    for (const selector of sbcSelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          await page.click(selector);
-          clicked = true;
-          this.log('Clicked SBC menu item');
-          break;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (!clicked) {
-      // Try finding by icon class
-      const iconSelector = '.icon-sbc';
-      if (await page.isVisible(iconSelector)) {
-        await page.click(iconSelector);
-        clicked = true;
-      }
-    }
+    const clicked = await this.ui.tryClickSelectors(SELECTORS.SBC_MENU, TIMEOUTS.MEDIUM);
 
     if (!clicked) {
       throw new Error('Could not find SBC menu item');
     }
 
-    await this.browserManager.sleep(2000);
+    await this.sleep(DELAYS.EXTRA_LONG);
     this.log('Navigated to SBC section', 'success');
   }
 
+  async goBack(): Promise<void> {
+    await this.ui.tryClickSelectors(SELECTORS.BACK_BUTTON, TIMEOUTS.MEDIUM);
+    await this.sleep(DELAYS.MEDIUM);
+  }
+
+  // ==========================================================================
+  // Category Selection
+  // ==========================================================================
+
   async selectCategory(category: string): Promise<void> {
     const page = this.browserManager.getPage();
-
     this.log(`Selecting category: ${category}...`);
 
-    // Category tabs are typically in a pill-bar or tab-bar
     const categorySelectors = [
       `.ut-tab-bar-item:has-text("${category}")`,
       `button:has-text("${category}")`,
@@ -69,28 +142,15 @@ export class SBCNavigator {
       `.ut-pill-toggle-item:has-text("${category}")`,
     ];
 
-    let clicked = false;
-    for (const selector of categorySelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          await page.click(selector);
-          clicked = true;
-          this.log(`Selected category: ${category}`);
-          break;
-        }
-      } catch {
-        continue;
-      }
-    }
+    let clicked = await this.ui.tryClickSelectors(categorySelectors, TIMEOUTS.MEDIUM);
 
     if (!clicked) {
-      // Try clicking by exact text match
+      // Fallback: try by exact text
       const elements = await page.locator(`text="${category}"`).all();
       for (const el of elements) {
         try {
           await el.click();
           clicked = true;
-          this.log(`Selected category: ${category}`);
           break;
         } catch {
           continue;
@@ -98,50 +158,52 @@ export class SBCNavigator {
       }
     }
 
-    if (!clicked) {
+    if (clicked) {
+      this.log(`Selected category: ${category}`);
+    } else {
       this.log(`Could not find category tab: ${category}`, 'warning');
     }
 
-    await this.browserManager.sleep(1500);
+    await this.sleep(DELAYS.LONG);
   }
+
+  // ==========================================================================
+  // Card Operations
+  // ==========================================================================
 
   async findAndClickCard(cardTitle: string): Promise<boolean> {
     const page = this.browserManager.getPage();
-
     this.log(`Looking for card: "${cardTitle}"...`);
 
-    // Scroll through the SBC list to find the card
-    const maxScrollAttempts = 10;
-
-    for (let i = 0; i < maxScrollAttempts; i++) {
-      // Find all card titles (h1.tileTitle)
-      const titleElements = page.locator('h1.tileTitle, .tileTitle, .ut-sbc-set-tile-view--title');
+    for (let attempt = 0; attempt < CONFIG.MAX_SCROLL_ATTEMPTS; attempt++) {
+      const titleElements = page.locator(SELECTORS.CARD_TITLE);
       const count = await titleElements.count();
       this.log(`  Found ${count} card titles`);
 
-      for (let j = 0; j < count; j++) {
-        const titleEl = titleElements.nth(j);
+      for (let i = 0; i < count; i++) {
+        const titleEl = titleElements.nth(i);
         const titleText = await titleEl.textContent().catch(() => '') || '';
 
-        // Exact match
         if (titleText.trim() === cardTitle) {
           this.log(`  Found exact match: "${titleText.trim()}"`);
-          // Click the parent card tile
-          const parentCard = titleEl.locator('xpath=ancestor::div[contains(@class, "ut-sbc-set-tile-view")]').first();
+
+          // Click the parent card tile or the title itself
+          const parentCard = titleEl.locator(`xpath=ancestor::${SELECTORS.CARD_TILE.replace('div[', 'div[')}`).first();
           if (await parentCard.isVisible().catch(() => false)) {
             await parentCard.click();
           } else {
             await titleEl.click();
           }
+
           this.log(`✓ Clicked card: "${cardTitle}"`, 'success');
-          await this.browserManager.sleep(1500);
+          await this.sleep(DELAYS.LONG);
           return true;
         }
       }
 
       // Scroll down to find more cards
       await page.keyboard.press('PageDown');
-      await this.browserManager.sleep(500);
+      await this.sleep(DELAYS.SHORT);
     }
 
     this.log(`✗ Could not find card: "${cardTitle}"`, 'error');
@@ -149,75 +211,36 @@ export class SBCNavigator {
   }
 
   async isCardCompleted(): Promise<boolean> {
-    const page = this.browserManager.getPage();
-
-    // Look for completion indicators
-    const completedSelectors = [
-      '.ut-sbc-challenge-status--complete',
-      '.completed',
-      '[class*="complete"]',
-      '.checkmark',
-      'svg.complete-icon',
-    ];
-
-    for (const selector of completedSelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          return true;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return false;
+    return await this.ui.isAnyVisible(SELECTORS.COMPLETED, TIMEOUTS.SHORT);
   }
 
-  /**
-   * Parse the repeat count from the web page (e.g., "Repeatable: 0")
-   * Returns the number from the page, or null if not found
-   */
+  // ==========================================================================
+  // Repeat Count
+  // ==========================================================================
+
   async getRepeatCountFromPage(): Promise<number | null> {
     const page = this.browserManager.getPage();
 
     try {
-      // Look for "Repeatable: X" text - most specific selectors first
-      const repeatableSelectors = [
-        '.ut-squad-building-set-status-label-view.repeat',
-        '.ut-squad-building-set-status-label-view.repeat span.text',
-        '.ut-squad-building-set-status-label-view span.text',
-        '.ut-squad-building-set-status-label-view',
-        '[class*="status-label"]',
-        'span.text:has-text("Repeatable")',
-      ];
+      // Try selectors first
+      for (const selector of SELECTORS.REPEATABLE_LABEL) {
+        const elements = page.locator(selector);
+        const count = await elements.count();
 
-      for (const selector of repeatableSelectors) {
-        try {
-          const elements = page.locator(selector);
-          const count = await elements.count();
-
-          for (let i = 0; i < count; i++) {
-            const text = await elements.nth(i).textContent();
-            if (text && text.toLowerCase().includes('repeatable')) {
-              // Match "Repeatable: X" pattern (including 0)
-              const match = text.match(/Repeatable[:\s]*(\d+)/i);
-              if (match) {
-                const repeatCount = parseInt(match[1], 10);
-                this.log(`Found repeat count from page: ${repeatCount} (selector: ${selector})`);
-                return repeatCount;
-              }
-            }
+        for (let i = 0; i < count; i++) {
+          const text = await elements.nth(i).textContent();
+          const repeatCount = this.parseRepeatCount(text);
+          if (repeatCount !== null) {
+            this.log(`Found repeat count: ${repeatCount}`);
+            return repeatCount;
           }
-        } catch {
-          continue;
         }
       }
 
-      // Try direct text search on page content
+      // Fallback: search page content
       const pageContent = await page.content();
-      const match = pageContent.match(/Repeatable[:\s]*(\d+)/i);
-      if (match) {
-        const repeatCount = parseInt(match[1], 10);
+      const repeatCount = this.parseRepeatCount(pageContent);
+      if (repeatCount !== null) {
         this.log(`Found repeat count from page content: ${repeatCount}`);
         return repeatCount;
       }
@@ -230,81 +253,29 @@ export class SBCNavigator {
     return null;
   }
 
-  async clickUseSquadBuilder(): Promise<boolean> {
-    const page = this.browserManager.getPage();
+  private parseRepeatCount(text: string | null): number | null {
+    if (!text) return null;
 
-    // First, check if "Clear Squad" button exists and is enabled - click it to clear any existing squad
-    this.log('Checking for "Clear Squad" button...');
-    let clearedSquad = false;
-
-    try {
-      // Look for Clear Squad button by text
-      const clearBtn = page.getByRole('button', { name: /Clear Squad|Очистить/i }).first();
-
-      if (await clearBtn.isVisible({ timeout: 1500 })) {
-        // Check if NOT disabled (enabled buttons can be clicked)
-        const classAttr = await clearBtn.getAttribute('class') || '';
-        const isDisabled = classAttr.includes('disabled') || await clearBtn.isDisabled().catch(() => false);
-
-        if (!isDisabled) {
-          await clearBtn.click();
-          this.log('Clicked "Clear Squad"', 'success');
-          clearedSquad = true;
-          await this.browserManager.sleep(1000);
-
-          // Handle confirmation popup if appears
-          const confirmBtnSelectors = [
-            'button:has-text("Yes")',
-            'button:has-text("OK")',
-            'button:has-text("Confirm")',
-            'button:has-text("Да")',
-            'button:has-text("ОК")',
-            '.ut-button-group button:first-child',
-          ];
-
-          for (const selector of confirmBtnSelectors) {
-            try {
-              const confirmBtn = page.locator(selector).first();
-              if (await confirmBtn.isVisible({ timeout: 1000 })) {
-                await confirmBtn.click();
-                this.log('Confirmed clear squad popup', 'success');
-                await this.browserManager.sleep(1000);
-                break;
-              }
-            } catch {
-              continue;
-            }
-          }
-        } else {
-          this.log('"Clear Squad" button is disabled (no squad to clear)');
-        }
-      }
-    } catch (e) {
-      this.log('No "Clear Squad" button found or not clickable');
+    const match = text.match(/Repeatable[:\s]*(\d+)/i);
+    if (match) {
+      return parseInt(match[1], 10);
     }
+    return null;
+  }
 
-    // Now click "Use Squad Builder"
+  // ==========================================================================
+  // Squad Builder Actions
+  // ==========================================================================
+
+  async clickUseSquadBuilder(): Promise<boolean> {
     this.log('Looking for "Use Squad Builder" button...');
 
-    const buttonSelectors = [
-      'button:has-text("Use Squad Builder")',
-      'button:has-text("Использовать конструктор")',
-      '.ut-squad-builder-btn',
-      '[class*="squad-builder"]',
-      'button.call-to-action',
-    ];
+    const clicked = await this.ui.tryClickSelectors(SELECTORS.USE_SQUAD_BUILDER, TIMEOUTS.MEDIUM);
 
-    for (const selector of buttonSelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          await page.click(selector);
-          this.log('Clicked "Use Squad Builder"', 'success');
-          await this.browserManager.sleep(2000);
-          return true;
-        }
-      } catch {
-        continue;
-      }
+    if (clicked) {
+      this.log('Clicked "Use Squad Builder"', 'success');
+      await this.sleep(DELAYS.EXTRA_LONG);
+      return true;
     }
 
     this.log('Could not find "Use Squad Builder" button', 'error');
@@ -312,115 +283,52 @@ export class SBCNavigator {
   }
 
   async clickExchangePlayers(): Promise<boolean> {
-    const page = this.browserManager.getPage();
-
     this.log('Looking for "Exchange Players" button...');
 
-    const buttonSelectors = [
-      'button:has-text("Exchange Players")',
-      'button:has-text("Обменять игроков")', // Russian
-      'button:has-text("Submit")',
-      '.ut-sbc-submit-btn',
-      'button.call-to-action:has-text("Exchange")',
-    ];
+    const clicked = await this.ui.tryClickSelectors(SELECTORS.EXCHANGE_PLAYERS, TIMEOUTS.MEDIUM);
 
-    for (const selector of buttonSelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          await page.click(selector);
-          this.log('Clicked "Exchange Players"', 'success');
-          await this.browserManager.sleep(2000);
-          return true;
-        }
-      } catch {
-        continue;
-      }
+    if (clicked) {
+      this.log('Clicked "Exchange Players"', 'success');
+      await this.sleep(DELAYS.EXTRA_LONG);
+      return true;
     }
 
     this.log('Could not find "Exchange Players" button', 'error');
     return false;
   }
 
-  async clickClaimRewards(): Promise<boolean> {
-    const page = this.browserManager.getPage();
+  // ==========================================================================
+  // Rewards
+  // ==========================================================================
 
+  async clickClaimRewards(): Promise<boolean> {
     this.log('Looking for "Claim Rewards" button...');
 
-    const buttonSelectors = [
-      'button:has-text("Claim Rewards")',
-      'button:has-text("Claim")',
-      'button:has-text("Получить награды")', // Russian
-      'button:has-text("Получить")',
-      '.ut-sbc-rewards-btn',
-      'button.call-to-action',
-    ];
+    const clicked = await this.ui.tryClickSelectors(SELECTORS.CLAIM_REWARDS, TIMEOUTS.MEDIUM);
 
-    for (const selector of buttonSelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          await page.click(selector);
-          this.log('Clicked "Claim Rewards"', 'success');
-          await this.browserManager.sleep(3000);
-          return true;
-        }
-      } catch {
-        continue;
-      }
+    if (clicked) {
+      this.log('Clicked "Claim Rewards"', 'success');
+      await this.sleep(DELAYS.EXTRA_LONG + DELAYS.MEDIUM);
     }
 
-    // Also handle any reward dialogs
+    // Handle any reward dialogs
     await this.handleRewardDialogs();
 
     return true;
   }
 
-  async handleRewardDialogs(): Promise<void> {
-    const page = this.browserManager.getPage();
-
-    // Click through any reward screens/dialogs
-    const dialogButtons = [
-      'button:has-text("OK")',
-      'button:has-text("Continue")',
-      'button:has-text("Продолжить")',
-      '.ut-button-group button',
-      '.dialog-body button',
-    ];
-
-    for (let i = 0; i < 5; i++) {
-      for (const selector of dialogButtons) {
-        try {
-          if (await page.isVisible(selector)) {
-            await page.click(selector);
-            await this.browserManager.sleep(1000);
-          }
-        } catch {
-          continue;
-        }
-      }
-      await this.browserManager.sleep(500);
+  private async handleRewardDialogs(): Promise<void> {
+    for (let i = 0; i < CONFIG.REWARD_DIALOG_RETRIES; i++) {
+      await this.ui.tryClickSelectors(SELECTORS.DIALOG_BUTTONS, TIMEOUTS.SHORT);
+      await this.sleep(DELAYS.SHORT);
     }
   }
 
-  async goBack(): Promise<void> {
-    const page = this.browserManager.getPage();
+  // ==========================================================================
+  // Utilities
+  // ==========================================================================
 
-    const backSelectors = [
-      '.ut-navigation-button-control',
-      'button.ut-navigation-button-control',
-      '[class*="back"]',
-      '.ut-back-button',
-    ];
-
-    for (const selector of backSelectors) {
-      try {
-        if (await page.isVisible(selector)) {
-          await page.click(selector);
-          await this.browserManager.sleep(1000);
-          return;
-        }
-      } catch {
-        continue;
-      }
-    }
+  private async sleep(ms: number): Promise<void> {
+    await this.browserManager.sleep(ms);
   }
 }

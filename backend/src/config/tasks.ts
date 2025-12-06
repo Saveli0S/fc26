@@ -50,8 +50,16 @@ export const ComplexTaskConfigSchema = z.object({
   goldCards: CardRequirementSchema.optional(),
 });
 
+// Squad Builder filters for daily/optional tasks
+export const SquadBuilderFiltersSchema = z.object({
+  quality: z.enum(['Bronze', 'Silver', 'Gold', 'Any']).optional(),
+  rarity: z.enum(['Common', 'Rare', 'Any']).optional(),
+  ignorePosition: z.boolean().optional(),
+});
+
 export type CardRequirement = z.infer<typeof CardRequirementSchema>;
 export type ComplexTaskConfig = z.infer<typeof ComplexTaskConfigSchema>;
+export type SquadBuilderFilters = z.infer<typeof SquadBuilderFiltersSchema>;
 
 // Extract enum values for Zod schema
 const sbcCategoryValues = Object.values(SBCCategory) as [string, ...string[]];
@@ -65,6 +73,7 @@ export const TaskSchema = z.object({
   enabled: z.boolean().default(true),
   taskType: z.enum(taskTypeValues).default(TaskType.Daily),
   complexConfig: ComplexTaskConfigSchema.optional(),
+  squadBuilderFilters: SquadBuilderFiltersSchema.optional(),
 });
 
 export const SquadBuilderRulesSchema = z.object({
