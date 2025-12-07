@@ -64,6 +64,7 @@ export const SquadBuilderFiltersSchema = z.object({
   quality: z.enum(['Bronze', 'Silver', 'Gold', 'Any']).optional(),
   rarity: z.enum(['Common', 'Rare', 'Any']).optional(),
   ignorePosition: z.boolean().optional(),
+  isRarityRequired: z.boolean().optional().default(false), // If false, retry without rarity filter when no cards found
 });
 
 export type CardRequirement = z.infer<typeof CardRequirementSchema>;

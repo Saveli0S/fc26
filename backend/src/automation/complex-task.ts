@@ -175,6 +175,9 @@ export class ComplexTaskHandler {
   // ==========================================================================
 
   private async addSingleCard(requirement: CardRequirement): Promise<boolean> {
+    // Step 0: Remove any requirement popover that might be blocking
+    await this.removeRequirementPopover();
+
     // Step 1: Find and click empty slot
     if (!await this.findAndClickEmptySlot()) {
       this.log('No empty slot found', 'error');
@@ -195,7 +198,59 @@ export class ComplexTaskHandler {
     }
 
     // Step 5: Select first card and add
-    return await this.selectFirstCardAndAdd();
+    const result = await this.selectFirstCardAndAdd();
+
+    // Step 6: If no cards found, try without rarity filter (rarity is optional for complex tasks)
+    if (!result) {
+      this.log('No cards found with rarity filter, retrying without rarity...', 'warning');
+
+      // Go back
+      if (!await this.clickBackButton()) {
+        this.log('Could not go back', 'error');
+        return false;
+      }
+
+      // Clear rarity filter
+      await this.clearRarityFilter();
+
+      // Click Search again
+      if (!await this.clickSearch()) {
+        return false;
+      }
+
+      // Try to add card again
+      return await this.selectFirstCardAndAdd();
+    }
+
+    return result;
+  }
+
+  // ==========================================================================
+  // Popover Handling
+  // ==========================================================================
+
+  /**
+   * Remove requirement popover that appears on slots 10-11 and blocks clicking
+   */
+  private async removeRequirementPopover(): Promise<void> {
+    const page = this.browserManager.getPage();
+
+    // Check if popover exists in DOM
+    const popover = page.locator('.ut-popover.show, .ut-popover');
+    const popoverCount = await popover.count().catch(() => 0);
+
+    if (popoverCount > 0) {
+      this.log('Found requirement popover, removing...', 'info');
+
+      // Remove popover from DOM using JavaScript
+      await page.evaluate(() => {
+        const popovers = document.querySelectorAll('.ut-popover.show, .ut-popover');
+        popovers.forEach(p => p.remove());
+      });
+
+      this.log('✓ Popover removed', 'success');
+      await this.sleep(DELAYS.SHORT);
+    }
   }
 
   // ==========================================================================
@@ -304,6 +359,81 @@ export class ComplexTaskHandler {
 
     this.log('Search button not found', 'error');
     return false;
+  }
+
+  private async clickBackButton(): Promise<boolean> {
+    const page = this.browserManager.getPage();
+
+    const backSelectors = [
+      'button.ut-navigation-button-control',
+      '.ut-navigation-button-control',
+      'button[class*="navigation-button"]',
+    ];
+
+    for (const selector of backSelectors) {
+      const backBtn = page.locator(selector).first();
+      if (await backBtn.isVisible({ timeout: TIMEOUTS.MEDIUM }).catch(() => false)) {
+        await backBtn.click({ force: true });
+        this.log('✓ Clicked back button', 'success');
+        await this.sleep(DELAYS.LONG);
+        return true;
+      }
+    }
+
+    this.log('Back button not found', 'error');
+    return false;
+  }
+
+  private async clearRarityFilter(): Promise<void> {
+    const page = this.browserManager.getPage();
+    this.log('Clearing rarity filter...', 'info');
+
+    // Find and click the clear/cross button for rarity dropdown
+    // The button has class "flat ut-search-filter-control--row-button"
+    const clearSelectors = [
+      'button.flat.ut-search-filter-control--row-button',
+      '.ut-search-filter-control--row-button.flat',
+      'button[class*="ut-search-filter-control--row-button"]',
+    ];
+
+    // Find the rarity dropdown first by its identifiers
+    const allDropdowns = page.locator('.inline-list-select.ut-search-filter-control');
+    const count = await allDropdowns.count();
+
+    for (let i = 0; i < count; i++) {
+      const dropdown = allDropdowns.nth(i);
+      const html = await dropdown.innerHTML().catch(() => '');
+
+      // Check if this is the rarity dropdown
+      const isRarityDropdown = CONFIG.FILTERS.RARITY.identifiers.some(id => html.includes(id));
+
+      if (isRarityDropdown) {
+        // Find the clear button within this dropdown
+        const clearBtn = dropdown.locator('button.flat.ut-search-filter-control--row-button, button.flat').first();
+        if (await clearBtn.isVisible({ timeout: TIMEOUTS.SHORT }).catch(() => false)) {
+          await clearBtn.click({ force: true });
+          this.log('✓ Cleared rarity filter', 'success');
+          await this.sleep(DELAYS.MEDIUM);
+          return;
+        }
+      }
+    }
+
+    // Fallback: try clicking any clear button that might be for rarity
+    for (const selector of clearSelectors) {
+      const clearBtns = page.locator(selector);
+      const btnCount = await clearBtns.count();
+
+      // Usually rarity is the second filter, so try index 1 or last one
+      if (btnCount > 1) {
+        await clearBtns.nth(1).click({ force: true });
+        this.log('✓ Cleared filter (fallback)', 'success');
+        await this.sleep(DELAYS.MEDIUM);
+        return;
+      }
+    }
+
+    this.log('Could not find rarity clear button', 'warning');
   }
 
   private async selectFirstCardAndAdd(): Promise<boolean> {
