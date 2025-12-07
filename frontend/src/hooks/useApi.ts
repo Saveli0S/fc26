@@ -1,4 +1,4 @@
-import { Config, Task, AppStatus } from '../types';
+import { Config, Task, AppStatus, InventorySummary, PlayerCard } from '../types';
 
 // In Electron (file://), use localhost explicitly
 const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
@@ -81,6 +81,24 @@ export const api = {
   // Emergency shutdown
   shutdown: () =>
     fetchApi<{ success: boolean; message: string }>('/shutdown', {
+      method: 'POST',
+    }),
+
+  // Inventory
+  getInventorySummary: () => fetchApi<InventorySummary>('/inventory/summary'),
+  getInventoryCards: (cardType?: string, rarity?: string) => {
+    const params = new URLSearchParams();
+    if (cardType) params.append('cardType', cardType);
+    if (rarity) params.append('rarity', rarity);
+    const query = params.toString();
+    return fetchApi<PlayerCard[]>(`/inventory/cards${query ? `?${query}` : ''}`);
+  },
+  syncInventory: () =>
+    fetchApi<{ success: boolean; message: string }>('/inventory/sync', {
+      method: 'POST',
+    }),
+  stopSync: () =>
+    fetchApi<{ success: boolean; message: string }>('/inventory/sync/stop', {
       method: 'POST',
     }),
 };

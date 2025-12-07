@@ -4,6 +4,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { TaskRunner, TaskResult } from './automation/task-runner.js';
 import { loadConfig, saveConfig, updateTask, addTask, removeTask, Config, Task } from './config/tasks.js';
+import { ClubScraper } from './automation/club-scraper.js';
+import { inventoryService } from './services/inventory.js';
 
 const app = express();
 const server = createServer(app);
@@ -17,6 +19,9 @@ const clients = new Set<WebSocket>();
 
 // Task runner instance
 let taskRunner: TaskRunner | null = null;
+
+// Club scraper instance
+let clubScraper: ClubScraper | null = null;
 
 // Broadcast log message to all connected clients
 function broadcastLog(message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info') {
@@ -269,6 +274,77 @@ app.get('/api/status', (req, res) => {
     browserInitialized: taskRunner !== null,
     isRunning: taskRunner?.getIsRunning() || false,
   });
+});
+
+// ============================================================================
+// Inventory API
+// ============================================================================
+
+// Get inventory summary
+app.get('/api/inventory/summary', (req, res) => {
+  try {
+    const summary = inventoryService.getSummary();
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get all cards (with optional filters)
+app.get('/api/inventory/cards', (req, res) => {
+  try {
+    const { cardType, rarity } = req.query;
+    const cards = inventoryService.getFiltered(
+      cardType as string | undefined,
+      rarity as string | undefined
+    );
+    res.json(cards);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Start inventory sync
+app.post('/api/inventory/sync', async (req, res) => {
+  try {
+    if (!taskRunner) {
+      return res.status(400).json({ error: 'Browser not initialized' });
+    }
+
+    if (inventoryService.isSyncInProgress()) {
+      return res.status(400).json({ error: 'Sync already in progress' });
+    }
+
+    if (taskRunner.getIsRunning()) {
+      return res.status(400).json({ error: 'Cannot sync while tasks are running' });
+    }
+
+    // Create scraper with browser manager from task runner
+    clubScraper = new ClubScraper(taskRunner.getBrowserManager(), broadcastLog);
+
+    // Send response before starting sync
+    res.json({ success: true, message: 'Starting inventory sync...' });
+
+    // Run sync asynchronously
+    await clubScraper.syncInventory();
+    clubScraper = null;
+
+  } catch (error) {
+    clubScraper = null;
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Stop inventory sync
+app.post('/api/inventory/sync/stop', (req, res) => {
+  try {
+    if (clubScraper) {
+      clubScraper.stop();
+    }
+    res.json({ success: true, message: 'Stop signal sent' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
 });
 
 // Health check

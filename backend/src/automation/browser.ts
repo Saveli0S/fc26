@@ -212,7 +212,7 @@ export class BrowserManager {
     if (ms <= 0) {
       await this.delayService.actionDelay();
     } else {
-      await new Promise(resolve => setTimeout(resolve, ms));
+    await new Promise(resolve => setTimeout(resolve, ms));
     }
   }
 

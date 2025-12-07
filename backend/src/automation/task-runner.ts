@@ -83,6 +83,13 @@ export class TaskRunner {
     await this.browserManager.close();
   }
 
+  /**
+   * Get browser manager for external use (e.g., inventory sync)
+   */
+  getBrowserManager(): BrowserManager {
+    return this.browserManager;
+  }
+
   // ==========================================================================
   // Public API - Task Execution
   // ==========================================================================

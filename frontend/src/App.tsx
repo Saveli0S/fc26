@@ -3,9 +3,10 @@ import { TaskList } from './components/TaskList';
 import { TaskConfig } from './components/TaskConfig';
 import { StatusLog } from './components/StatusLog';
 import { SessionReport } from './components/SessionReport';
+import { InventoryDialog } from './components/InventoryDialog';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api } from './hooks/useApi';
-import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules } from './types';
+import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules, InventorySummary } from './types';
 
 // Check if running in Electron with secure storage
 const isElectron = !!window.electronAPI?.credentials;
@@ -65,6 +66,11 @@ function App() {
 	const [password, setPassword] = useState('');
 	const [rememberCredentials, setRememberCredentials] = useState(false);
 	const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+
+	// Inventory state
+	const [showInventory, setShowInventory] = useState(false);
+	const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
+	const [syncingInventory, setSyncingInventory] = useState(false);
 
 	// Load credentials from secure storage on mount
 	useEffect(() => {
@@ -294,6 +300,52 @@ function App() {
 		}
 	};
 
+	// Inventory handlers
+	const loadInventorySummary = async () => {
+		try {
+			const summary = await api.getInventorySummary();
+			setInventorySummary(summary);
+		} catch (err) {
+			console.error('Failed to load inventory summary:', err);
+		}
+	};
+
+	const handleSyncInventory = async () => {
+		setError(null);
+		setSyncingInventory(true);
+		try {
+			await api.syncInventory();
+			// Summary will be updated via logs - no need to poll here
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to start inventory sync');
+		}
+	};
+
+	const handleStopSync = async () => {
+		try {
+			await api.stopSync();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to stop sync');
+		}
+	};
+
+	// Load inventory summary on mount and after sync
+	useEffect(() => {
+		loadInventorySummary();
+	}, []);
+
+	// Detect when sync completes by watching logs
+	useEffect(() => {
+		const lastLog = logs[logs.length - 1];
+		if (lastLog && lastLog.message.includes('Sync Complete')) {
+			setSyncingInventory(false);
+			loadInventorySummary();
+		}
+		if (lastLog && (lastLog.message.includes('Sync failed') || lastLog.message.includes('Sync stopped'))) {
+			setSyncingInventory(false);
+		}
+	}, [logs]);
+
 	return (
 		<div className="min-h-screen bg-[#0a0e14]">
 			{/* Header */}
@@ -412,6 +464,41 @@ function App() {
 						Login to EA
 					</button>
 
+					{/* Inventory Buttons */}
+					<div className="h-6 w-px bg-ea-border" />
+
+					{syncingInventory ? (
+						<button
+							onClick={handleStopSync}
+							className="px-4 py-2 rounded font-medium text-sm bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all"
+						>
+							⏹ Stop Sync
+						</button>
+					) : (
+						<button
+							onClick={handleSyncInventory}
+							disabled={!status.browserInitialized || status.isRunning}
+							className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || status.isRunning
+								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+								: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20'
+								}`}
+						>
+							🔄 Sync Cards
+						</button>
+					)}
+
+					<button
+						onClick={() => setShowInventory(true)}
+						className="px-4 py-2 rounded font-medium text-sm bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-2"
+					>
+						📦 Inventory
+						{inventorySummary && inventorySummary.total > 0 && (
+							<span className="px-1.5 py-0.5 rounded bg-ea-green/20 text-ea-green text-xs">
+								{inventorySummary.total}
+							</span>
+						)}
+					</button>
+
 					<div className="flex-1" />
 
 					{status.isRunning ? (
@@ -490,6 +577,11 @@ function App() {
 					taskResults={taskResults}
 					onClose={() => setShowReport(false)}
 				/>
+			)}
+
+			{/* Inventory Dialog */}
+			{showInventory && (
+				<InventoryDialog onClose={() => setShowInventory(false)} />
 			)}
 		</div>
 	);

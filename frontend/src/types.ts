@@ -68,3 +68,24 @@ export interface AppStatus {
   browserInitialized: boolean;
   isRunning: boolean;
 }
+
+// Card Inventory
+export interface PlayerCard {
+  id: string;
+  cardType: 'Bronze' | 'Silver' | 'Gold';
+  rarity: 'Common' | 'Rare';
+  playerName: string;
+  rating: number;
+  position: string;
+  scrapedAt: string;
+}
+
+export interface InventorySummary {
+  total: number;
+  byType: {
+    Bronze: { Common: number; Rare: number };
+    Silver: { Common: number; Rare: number };
+    Gold: { Common: number; Rare: number };
+  };
+  lastSyncAt: string | null;
+}

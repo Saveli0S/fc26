@@ -66,7 +66,11 @@ export class SquadBuilder {
   ) {
     this.browserManager = browserManager;
     this.rules = rules;
-    this.filters = taskFilters || {};
+    // Provide default values for optional filter properties
+    this.filters = {
+      isRarityRequired: false,
+      ...taskFilters,
+    };
     this.log = logCallback || ((msg) => console.log(msg));
     this.ui = new UIHelper(browserManager, this.log);
 
