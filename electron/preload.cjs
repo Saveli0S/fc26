@@ -12,4 +12,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // App info
   isElectron: true,
+
+  // Secure credential storage
+  credentials: {
+    get: () => ipcRenderer.invoke('credentials:get'),
+    set: (credentials) => ipcRenderer.invoke('credentials:set', credentials),
+    clear: () => ipcRenderer.invoke('credentials:clear'),
+    has: () => ipcRenderer.invoke('credentials:has'),
+  },
 });

@@ -1,5 +1,6 @@
 import { Page, Locator } from 'playwright';
 import { BrowserManager, LogCallback } from './browser.js';
+import { DelayService } from './delays.js';
 
 // ============================================================================
 // Types
@@ -137,6 +138,10 @@ export class UIHelper {
 
   private get page(): Page {
     return this.browserManager.getPage();
+  }
+
+  private get delays(): DelayService {
+    return this.browserManager.getDelayService();
   }
 
   // ==========================================================================

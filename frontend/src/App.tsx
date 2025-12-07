@@ -7,11 +7,47 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { api } from './hooks/useApi';
 import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules } from './types';
 
-// LocalStorage keys for credentials
-const STORAGE_KEYS = {
-	EMAIL: 'fc26_ea_email',
-	PASSWORD: 'fc26_ea_password',
-	REMEMBER: 'fc26_remember_credentials',
+// Check if running in Electron with secure storage
+const isElectron = !!window.electronAPI?.credentials;
+
+// Secure credential helpers
+const secureCredentials = {
+	async get() {
+		if (isElectron) {
+			return window.electronAPI!.credentials.get();
+		}
+		// Fallback to localStorage for dev/browser mode
+		return {
+			email: localStorage.getItem('fc26_ea_email') || '',
+			password: localStorage.getItem('fc26_ea_password') || '',
+			remember: localStorage.getItem('fc26_remember_credentials') === 'true',
+		};
+	},
+	async set(creds: { email: string; password: string; remember: boolean }) {
+		if (isElectron) {
+			return window.electronAPI!.credentials.set(creds);
+		}
+		// Fallback to localStorage for dev/browser mode
+		if (creds.remember) {
+			localStorage.setItem('fc26_ea_email', creds.email);
+			localStorage.setItem('fc26_ea_password', creds.password);
+			localStorage.setItem('fc26_remember_credentials', 'true');
+		} else {
+			localStorage.removeItem('fc26_ea_email');
+			localStorage.removeItem('fc26_ea_password');
+			localStorage.removeItem('fc26_remember_credentials');
+		}
+		return { success: true };
+	},
+	async clear() {
+		if (isElectron) {
+			return window.electronAPI!.credentials.clear();
+		}
+		localStorage.removeItem('fc26_ea_email');
+		localStorage.removeItem('fc26_ea_password');
+		localStorage.removeItem('fc26_remember_credentials');
+		return { success: true };
+	},
 };
 
 function App() {
@@ -25,39 +61,47 @@ function App() {
 	const runningAllTasks = useRef(false);
 
 	// Credentials state
-	const [email, setEmail] = useState(() => localStorage.getItem(STORAGE_KEYS.EMAIL) || '');
-	const [password, setPassword] = useState(() => localStorage.getItem(STORAGE_KEYS.PASSWORD) || '');
-	const [rememberCredentials, setRememberCredentials] = useState(
-		() => localStorage.getItem(STORAGE_KEYS.REMEMBER) === 'true'
-	);
+	const [email, setEmail] = useState('');
+	const [password, setPassword] = useState('');
+	const [rememberCredentials, setRememberCredentials] = useState(false);
+	const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+
+	// Load credentials from secure storage on mount
+	useEffect(() => {
+		secureCredentials.get().then((creds) => {
+			setEmail(creds.email);
+			setPassword(creds.password);
+			setRememberCredentials(creds.remember);
+			setCredentialsLoaded(true);
+		});
+	}, []);
+
+	// Save credentials to secure storage when remember is enabled
+	useEffect(() => {
+		if (!credentialsLoaded) return; // Don't save until initial load complete
+		if (rememberCredentials) {
+			secureCredentials.set({ email, password, remember: true });
+		}
+	}, [email, password, rememberCredentials, credentialsLoaded]);
 
 	// Save/clear credentials when remember checkbox changes
 	const handleRememberChange = (checked: boolean) => {
 		setRememberCredentials(checked);
 		if (checked) {
-			localStorage.setItem(STORAGE_KEYS.REMEMBER, 'true');
-			localStorage.setItem(STORAGE_KEYS.EMAIL, email);
-			localStorage.setItem(STORAGE_KEYS.PASSWORD, password);
+			secureCredentials.set({ email, password, remember: true });
 		} else {
-			localStorage.removeItem(STORAGE_KEYS.REMEMBER);
-			localStorage.removeItem(STORAGE_KEYS.EMAIL);
-			localStorage.removeItem(STORAGE_KEYS.PASSWORD);
+			secureCredentials.clear();
 		}
 	};
 
-	// Update stored credentials when they change (if remember is enabled)
+	// Update email state
 	const handleEmailChange = (value: string) => {
 		setEmail(value);
-		if (rememberCredentials) {
-			localStorage.setItem(STORAGE_KEYS.EMAIL, value);
-		}
 	};
 
+	// Update password state
 	const handlePasswordChange = (value: string) => {
 		setPassword(value);
-		if (rememberCredentials) {
-			localStorage.setItem(STORAGE_KEYS.PASSWORD, value);
-		}
 	};
 
 	// WebSocket handlers

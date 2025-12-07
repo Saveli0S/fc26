@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const secureStore = require('./secure-store.cjs');
 
 // Keep references to prevent garbage collection
 let mainWindow = null;
@@ -198,4 +199,23 @@ ipcMain.handle('get-app-version', () => {
 
 ipcMain.handle('is-dev', () => {
   return isDev;
+});
+
+// Secure credential storage IPC handlers
+ipcMain.handle('credentials:get', () => {
+  return secureStore.getCredentials();
+});
+
+ipcMain.handle('credentials:set', (event, credentials) => {
+  secureStore.setCredentials(credentials);
+  return { success: true };
+});
+
+ipcMain.handle('credentials:clear', () => {
+  secureStore.clearCredentials();
+  return { success: true };
+});
+
+ipcMain.handle('credentials:has', () => {
+  return secureStore.hasCredentials();
 });

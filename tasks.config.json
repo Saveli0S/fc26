@@ -151,6 +151,7 @@
     "ignorePosition": true,
     "sortBy": "rating-low-to-high",
     "maxOVR": 85,
-    "preferCommon": true
+    "preferCommon": true,
+    "speedProfile": "humanlike"
   }
 }

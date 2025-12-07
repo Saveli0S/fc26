@@ -31,10 +31,19 @@ export const CardRarity = {
   Rare: 'Rare',
 } as const;
 
+// Speed profiles for rate limiting
+export const SpeedProfile = {
+  Fast: 'fast',
+  Normal: 'normal',
+  Safe: 'safe',
+  HumanLike: 'humanlike',
+} as const;
+
 export type SBCCategoryType = typeof SBCCategory[keyof typeof SBCCategory];
 export type TaskTypeType = typeof TaskType[keyof typeof TaskType];
 export type CardQualityType = typeof CardQuality[keyof typeof CardQuality];
 export type CardRarityType = typeof CardRarity[keyof typeof CardRarity];
+export type SpeedProfileType = typeof SpeedProfile[keyof typeof SpeedProfile];
 
 // Complex task card requirement schema
 export const CardRequirementSchema = z.object({
@@ -76,6 +85,9 @@ export const TaskSchema = z.object({
   squadBuilderFilters: SquadBuilderFiltersSchema.optional(),
 });
 
+// Extract speed profile values for Zod schema
+const speedProfileValues = Object.values(SpeedProfile) as [string, ...string[]];
+
 export const SquadBuilderRulesSchema = z.object({
   untradablesOnly: z.boolean().default(true),
   excludeActiveSquad: z.boolean().default(true),
@@ -83,6 +95,7 @@ export const SquadBuilderRulesSchema = z.object({
   sortBy: z.enum(['rating-low-to-high', 'rating-high-to-low']).default('rating-low-to-high'),
   maxOVR: z.number().min(1).max(99).default(85),
   preferCommon: z.boolean().default(true),
+  speedProfile: z.enum(speedProfileValues).default(SpeedProfile.Normal),
 });
 
 export const ConfigSchema = z.object({
@@ -117,6 +130,7 @@ export function loadConfig(): Config {
         sortBy: 'rating-low-to-high',
         maxOVR: 85,
         preferCommon: true,
+        speedProfile: 'normal',
       },
     };
     saveConfig(defaultConfig);

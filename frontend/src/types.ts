@@ -15,8 +15,16 @@ export const TaskType = {
   Complex: 'complex',
 } as const;
 
+export const SpeedProfile = {
+  Fast: 'fast',
+  Normal: 'normal',
+  Safe: 'safe',
+  HumanLike: 'humanlike',
+} as const;
+
 export type SBCCategoryType = typeof SBCCategory[keyof typeof SBCCategory];
 export type TaskTypeType = typeof TaskType[keyof typeof TaskType];
+export type SpeedProfileType = typeof SpeedProfile[keyof typeof SpeedProfile];
 
 export interface Task {
   id: string;
@@ -34,6 +42,7 @@ export interface SquadBuilderRules {
   sortBy: 'rating-low-to-high' | 'rating-high-to-low';
   maxOVR: number;
   preferCommon: boolean;
+  speedProfile: SpeedProfileType;
 }
 
 export interface Config {

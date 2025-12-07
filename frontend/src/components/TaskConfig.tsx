@@ -1,5 +1,29 @@
 import { useState } from 'react';
-import { Task, SquadBuilderRules, SBCCategory, TaskType, SBCCategoryType, TaskTypeType } from '../types';
+import { Task, SquadBuilderRules, SBCCategory, TaskType, SpeedProfile, SBCCategoryType, TaskTypeType, SpeedProfileType } from '../types';
+
+// Speed profile display labels and descriptions
+const speedProfileInfo: Record<SpeedProfileType, { label: string; description: string; color: string }> = {
+	[SpeedProfile.Fast]: {
+		label: '⚡ Fast',
+		description: 'Fastest execution, minimal delays',
+		color: 'text-yellow-400',
+	},
+	[SpeedProfile.Normal]: {
+		label: '🔄 Normal',
+		description: 'Balanced speed and safety',
+		color: 'text-blue-400',
+	},
+	[SpeedProfile.Safe]: {
+		label: '🛡️ Safe',
+		description: 'Slower with longer pauses',
+		color: 'text-green-400',
+	},
+	[SpeedProfile.HumanLike]: {
+		label: '🧑 Human-like',
+		description: 'Realistic movements and timing',
+		color: 'text-purple-400',
+	},
+};
 
 interface TaskConfigProps {
 	rules: SquadBuilderRules;
@@ -97,6 +121,35 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps)
 							onChange={(e) => handleRuleChange('maxOVR', parseInt(e.target.value))}
 							className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-ea-green"
 						/>
+					</div>
+
+					{/* Speed Profile */}
+					<div>
+						<label className="block text-xs text-gray-500 mb-2">Automation Speed</label>
+						<div className="grid grid-cols-2 gap-2">
+							{(Object.keys(SpeedProfile) as Array<keyof typeof SpeedProfile>).map((key) => {
+								const value = SpeedProfile[key];
+								const info = speedProfileInfo[value];
+								const isSelected = rules.speedProfile === value;
+								return (
+									<button
+										key={value}
+										onClick={() => handleRuleChange('speedProfile', value)}
+										className={`p-2 rounded border text-left transition-all ${isSelected
+												? 'border-ea-green bg-ea-green/10'
+												: 'border-ea-border bg-gray-900 hover:border-gray-600'
+											}`}
+									>
+										<div className={`text-sm font-medium ${isSelected ? info.color : 'text-gray-300'}`}>
+											{info.label}
+										</div>
+										<div className="text-xs text-gray-500 mt-0.5">
+											{info.description}
+										</div>
+									</button>
+								);
+							})}
+						</div>
 					</div>
 				</div>
 			</div>

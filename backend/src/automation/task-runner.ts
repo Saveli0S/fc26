@@ -4,7 +4,8 @@ import { SBCNavigator } from './sbc.js';
 import { SquadBuilder } from './squad-builder.js';
 import { ComplexTaskHandler } from './complex-task.js';
 import { UIHelper, EA_SELECTORS } from './ui-helpers.js';
-import { loadConfig, Task, SquadBuilderRules, TaskType } from '../config/tasks.js';
+import { loadConfig, Task, SquadBuilderRules, TaskType, SpeedProfile } from '../config/tasks.js';
+import { SpeedProfileType } from './delays.js';
 
 // ============================================================================
 // Types
@@ -100,6 +101,11 @@ export class TaskRunner {
       const config = loadConfig();
       const enabledTasks = config.dailyTasks.filter(t => t.enabled);
 
+      // Set speed profile from config
+      const speedProfile = config.squadBuilderRules.speedProfile as SpeedProfileType || 'normal';
+      this.browserManager.setSpeedProfile(speedProfile);
+      this.log(`Speed profile: ${speedProfile}`, 'info');
+
       this.log(`Running ${enabledTasks.length} tasks...`, 'info');
 
       for (const task of enabledTasks) {
@@ -138,6 +144,10 @@ export class TaskRunner {
 
     this.isRunning = true;
     this.shouldStop = false;
+
+    // Set speed profile from config
+    const speedProfile = config.squadBuilderRules.speedProfile as SpeedProfileType || 'normal';
+    this.browserManager.setSpeedProfile(speedProfile);
 
     try {
       return await this.runTask(task, config.squadBuilderRules);

@@ -1,6 +1,7 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import { existsSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import { DelayService, SpeedProfile, SpeedProfileType } from './delays.js';
 
 // ============================================================================
 // Types
@@ -72,9 +73,28 @@ export class BrowserManager {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private log: LogCallback;
+  private delayService: DelayService;
 
-  constructor(logCallback?: LogCallback) {
+  constructor(logCallback?: LogCallback, speedProfile?: SpeedProfileType) {
     this.log = logCallback || ((msg) => console.log(msg));
+    this.delayService = new DelayService(speedProfile || SpeedProfile.Normal);
+  }
+
+  // ==========================================================================
+  // Delay Service Access
+  // ==========================================================================
+
+  getDelayService(): DelayService {
+    return this.delayService;
+  }
+
+  setSpeedProfile(profile: SpeedProfileType): void {
+    this.delayService.setProfile(profile);
+    this.log(`Speed profile set to: ${profile}`, 'info');
+  }
+
+  getSpeedProfile(): SpeedProfileType {
+    return this.delayService.getProfile();
   }
 
   // ==========================================================================
@@ -184,8 +204,61 @@ export class BrowserManager {
   // Utilities
   // ==========================================================================
 
+  /**
+   * Sleep for specified duration
+   * @param ms - Duration in milliseconds. If 0 or negative, uses profile-based action delay
+   */
   async sleep(ms: number): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, ms));
+    if (ms <= 0) {
+      await this.delayService.actionDelay();
+    } else {
+      await new Promise(resolve => setTimeout(resolve, ms));
+    }
+  }
+
+  /**
+   * Wait with profile-based delay
+   */
+  async actionDelay(): Promise<void> {
+    await this.delayService.actionDelay();
+  }
+
+  /**
+   * Short delay for rapid sequences
+   */
+  async shortDelay(): Promise<void> {
+    await this.delayService.shortDelay();
+  }
+
+  /**
+   * Long delay for important actions
+   */
+  async longDelay(): Promise<void> {
+    await this.delayService.longDelay();
+  }
+
+  /**
+   * Human-like mouse movement to coordinates
+   */
+  async humanMove(x: number, y: number): Promise<void> {
+    if (!this.page) return;
+    await this.delayService.mouseMove(this.page, x, y);
+  }
+
+  /**
+   * Human-like click at coordinates
+   */
+  async humanClick(x: number, y: number): Promise<void> {
+    if (!this.page) return;
+    await this.delayService.click(this.page, x, y);
+  }
+
+  /**
+   * Human-like text typing
+   */
+  async humanType(selector: string, text: string): Promise<void> {
+    if (!this.page) return;
+    await this.delayService.typeText(this.page, selector, text);
   }
 
   async screenshot(name: string): Promise<void> {
