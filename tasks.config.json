@@ -47,7 +47,7 @@
       "category": "Upgrades",
       "cardTitle": "Bronze Upgrade",
       "repeatCount": 3,
-      "enabled": false,
+      "enabled": true,
       "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Bronze",

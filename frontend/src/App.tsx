@@ -346,6 +346,14 @@ function App() {
 		}
 	}, [logs]);
 
+	// Refresh inventory count when cards are exchanged (removed from inventory)
+	useEffect(() => {
+		const lastLog = logs[logs.length - 1];
+		if (lastLog && lastLog.message.includes('Inventory updated: removed')) {
+			loadInventorySummary();
+		}
+	}, [logs]);
+
 	return (
 		<div className="min-h-screen bg-[#0a0e14]">
 			{/* Header */}

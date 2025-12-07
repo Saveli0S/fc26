@@ -3,6 +3,16 @@ import { SquadBuilderRules, SquadBuilderFilters } from '../config/tasks.js';
 import { UIHelper, DELAYS, TIMEOUTS } from './ui-helpers.js';
 
 // ============================================================================
+// Types
+// ============================================================================
+
+export interface UsedCardsInfo {
+  cardType: 'Bronze' | 'Silver' | 'Gold' | null;
+  rarity: 'Common' | 'Rare';
+  count: number; // 11 for a full squad
+}
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -135,6 +145,24 @@ export class SquadBuilder {
 
     this.log('✗ Could not find Build button', 'error');
     return false;
+  }
+
+  /**
+   * Get info about cards that will be used based on current filters
+   * Called after buildSquad() to track what was used
+   */
+  getUsedCardsInfo(): UsedCardsInfo {
+    const quality = this.filters.quality || CONFIG.DEFAULTS.QUALITY;
+    const rarity = (this.filters.rarity || CONFIG.DEFAULTS.RARITY) as 'Common' | 'Rare';
+
+    // Quality can be 'Any' which means mixed - we can't know exact types
+    const cardType = quality === 'Any' ? null : quality as 'Bronze' | 'Silver' | 'Gold';
+
+    return {
+      cardType,
+      rarity,
+      count: 11, // Standard SBC squad size
+    };
   }
 
   // ==========================================================================

@@ -11,6 +11,14 @@ interface CardTypeRequirement {
   type: string;
 }
 
+export interface UsedCardsSummary {
+  cards: Array<{
+    cardType: 'Bronze' | 'Silver' | 'Gold';
+    rarity: 'Common' | 'Rare';
+    count: number;
+  }>;
+}
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -52,11 +60,19 @@ export class ComplexTaskHandler {
   private browserManager: BrowserManager;
   private log: LogCallback;
   private ui: UIHelper;
+  private usedCards: UsedCardsSummary = { cards: [] };
 
   constructor(browserManager: BrowserManager, logCallback?: LogCallback) {
     this.browserManager = browserManager;
     this.log = logCallback || ((msg) => console.log(msg));
     this.ui = new UIHelper(browserManager, this.log);
+  }
+
+  /**
+   * Get summary of cards used in this task (call after execute())
+   */
+  getUsedCardsSummary(): UsedCardsSummary {
+    return this.usedCards;
   }
 
   // ==========================================================================
@@ -69,6 +85,9 @@ export class ComplexTaskHandler {
   async execute(config: ComplexTaskConfig): Promise<boolean> {
     this.log('=== Starting Complex Task (Manual Card Selection) ===', 'info');
 
+    // Reset used cards tracking
+    this.usedCards = { cards: [] };
+
     try {
       await this.ui.handleClearSquad();
 
@@ -77,6 +96,13 @@ export class ComplexTaskHandler {
       for (const { requirement, type } of requirements) {
         const success = await this.processCardType(requirement, type);
         if (!success) return false;
+
+        // Track the cards used for this requirement
+        this.usedCards.cards.push({
+          cardType: type as 'Bronze' | 'Silver' | 'Gold',
+          rarity: requirement.rarity as 'Common' | 'Rare',
+          count: requirement.count,
+        });
       }
 
       return await this.finalizeTask();

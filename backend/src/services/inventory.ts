@@ -143,6 +143,56 @@ class InventoryService {
     this.save();
   }
 
+  // ==========================================================================
+  // Card Removal (for SBC exchanges)
+  // ==========================================================================
+
+  /**
+   * Remove cards by criteria (used after SBC exchange)
+   * Removes the specified count of cards matching cardType and rarity
+   * Returns the number of cards actually removed
+   */
+  removeCards(cardType: 'Bronze' | 'Silver' | 'Gold', rarity: 'Common' | 'Rare', count: number): number {
+    let removed = 0;
+    const newCards: PlayerCard[] = [];
+
+    for (const card of this.inventory.cards) {
+      if (removed < count && card.cardType === cardType && card.rarity === rarity) {
+        removed++;
+        // Don't add to newCards (effectively removing it)
+      } else {
+        newCards.push(card);
+      }
+    }
+
+    this.inventory.cards = newCards;
+    this.save();
+    return removed;
+  }
+
+  /**
+   * Remove multiple card types at once (for complex SBC tasks)
+   * @param usedCards - Array of { cardType, rarity, count }
+   */
+  removeUsedCards(usedCards: Array<{ cardType: 'Bronze' | 'Silver' | 'Gold'; rarity: 'Common' | 'Rare'; count: number }>): void {
+    for (const { cardType, rarity, count } of usedCards) {
+      this.removeCards(cardType, rarity, count);
+    }
+  }
+
+  /**
+   * Remove a specific card by ID
+   */
+  removeCardById(cardId: string): boolean {
+    const initialLength = this.inventory.cards.length;
+    this.inventory.cards = this.inventory.cards.filter(card => card.id !== cardId);
+    const removed = this.inventory.cards.length < initialLength;
+    if (removed) {
+      this.save();
+    }
+    return removed;
+  }
+
 }
 
 // Generate unique ID for a card

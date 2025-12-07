@@ -1,11 +1,12 @@
 import { BrowserManager, LogCallback } from './browser.js';
 import { AuthManager } from './auth.js';
 import { SBCNavigator } from './sbc.js';
-import { SquadBuilder } from './squad-builder.js';
-import { ComplexTaskHandler } from './complex-task.js';
+import { SquadBuilder, UsedCardsInfo } from './squad-builder.js';
+import { ComplexTaskHandler, UsedCardsSummary } from './complex-task.js';
 import { UIHelper, EA_SELECTORS } from './ui-helpers.js';
 import { loadConfig, Task, SquadBuilderRules, TaskType, SpeedProfile } from '../config/tasks.js';
 import { SpeedProfileType } from './delays.js';
+import { inventoryService } from '../services/inventory.js';
 
 // ============================================================================
 // Types
@@ -232,6 +233,10 @@ export class TaskRunner {
       result.totalRepeats = 1;
       this.log('Complex task completed', 'success');
 
+      // Remove used cards from inventory after successful exchange
+      const usedCardsSummary = handler.getUsedCardsSummary();
+      this.removeComplexTaskCardsFromInventory(usedCardsSummary);
+
       await this.sbcNavigator.clickClaimRewards();
     } else {
       result.status = 'failed';
@@ -325,15 +330,59 @@ export class TaskRunner {
     const squadBuilder = new SquadBuilder(this.browserManager, rules, this.log, task.squadBuilderFilters);
     await squadBuilder.buildSquad();
 
+    // Track what cards will be used BEFORE exchange
+    const usedCardsInfo = squadBuilder.getUsedCardsInfo();
+
     this.throwIfStopped();
 
     // Exchange - if button enabled, requirements were met
     const exchangeSuccess = await this.sbcNavigator.clickExchangePlayers();
     if (!exchangeSuccess) throw new Error('Exchange Players button disabled - requirements not met');
 
+    // After successful exchange, remove used cards from inventory
+    this.removeUsedCardsFromInventory(usedCardsInfo);
+
     this.throwIfStopped();
 
     await this.sbcNavigator.clickClaimRewards();
+  }
+
+  /**
+   * Remove used cards from inventory after successful exchange (Squad Builder)
+   */
+  private removeUsedCardsFromInventory(usedCardsInfo: UsedCardsInfo): void {
+    if (!usedCardsInfo.cardType) {
+      // Quality was 'Any' - we can't know what cards were used
+      this.log('Cards used with Any quality - cannot track specific types in inventory', 'warning');
+      return;
+    }
+
+    const { cardType, rarity, count } = usedCardsInfo;
+    const removed = inventoryService.removeCards(cardType, rarity, count);
+
+    if (removed > 0) {
+      this.log(`Inventory updated: removed ${removed}x ${rarity} ${cardType} cards`, 'info');
+    }
+  }
+
+  /**
+   * Remove used cards from inventory after successful exchange (Complex Task)
+   */
+  private removeComplexTaskCardsFromInventory(summary: UsedCardsSummary): void {
+    let totalRemoved = 0;
+
+    for (const { cardType, rarity, count } of summary.cards) {
+      const removed = inventoryService.removeCards(cardType, rarity, count);
+      totalRemoved += removed;
+
+      if (removed > 0) {
+        this.log(`Inventory updated: removed ${removed}x ${rarity} ${cardType} cards`, 'info');
+      }
+    }
+
+    if (totalRemoved > 0) {
+      this.log(`Total cards removed from inventory: ${totalRemoved}`, 'success');
+    }
   }
 
   // ==========================================================================

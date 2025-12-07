@@ -184,7 +184,9 @@ export class ClubScraper {
       '.ut-tile-view',
     ];
 
+    let playersClicked = false;
     for (const selector of playersSelectors) {
+      if (playersClicked) break;
       const tiles = page.locator(selector);
       const count = await tiles.count();
 
@@ -195,22 +197,88 @@ export class ClubScraper {
         if (text.toLowerCase().includes('player')) {
           await tile.click();
           this.log('Clicked Players tile', 'success');
-          await this.sleep(DELAYS.EXTRA_LONG);
-          return;
+          playersClicked = true;
+          break;
         }
       }
     }
 
     // Fallback: try clicking by text
-    const playersText = page.getByText('Players', { exact: false }).first();
-    if (await playersText.isVisible({ timeout: TIMEOUTS.MEDIUM }).catch(() => false)) {
-      await playersText.click();
-      this.log('Clicked Players (by text)', 'success');
-      await this.sleep(DELAYS.EXTRA_LONG);
-      return;
+    if (!playersClicked) {
+      const playersText = page.getByText('Players', { exact: false }).first();
+      if (await playersText.isVisible({ timeout: TIMEOUTS.MEDIUM }).catch(() => false)) {
+        await playersText.click();
+        this.log('Clicked Players (by text)', 'success');
+        playersClicked = true;
+      }
     }
 
-    throw new Error('Could not find Players tile');
+    if (!playersClicked) {
+      throw new Error('Could not find Players tile');
+    }
+
+    await this.sleep(DELAYS.EXTRA_LONG);
+
+    // Click Search button to open filter panel
+    await this.openSearchFilterPanel();
+  }
+
+  /**
+   * Click the Search button to open the filter panel
+   * The button is typically in the header area: .ut-list-header-action button
+   */
+  private async openSearchFilterPanel(): Promise<void> {
+    const page = this.browserManager.getPage();
+    this.log('Opening filter panel (clicking Search)...', 'info');
+
+    const searchButtonSelectors = [
+      '.ut-list-header-action button',
+      'button.btn-standard.mini.primary',
+      '.ut-list-header button',
+      'button:has-text("Search")',
+      'button:has-text("Поиск")',
+    ];
+
+    for (const selector of searchButtonSelectors) {
+      try {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: TIMEOUTS.SHORT })) {
+          await btn.click({ force: true });
+          this.log('Clicked Search button to open filters', 'success');
+          await this.sleep(DELAYS.LONG);
+          return;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    // Fallback: use JavaScript to click
+    try {
+      const clicked = await page.evaluate(() => {
+        const btn = document.querySelector('.ut-list-header-action button') as HTMLButtonElement;
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        const miniBtn = document.querySelector('button.btn-standard.mini.primary') as HTMLButtonElement;
+        if (miniBtn) {
+          miniBtn.click();
+          return true;
+        }
+        return false;
+      });
+
+      if (clicked) {
+        this.log('Clicked Search button via JavaScript', 'success');
+        await this.sleep(DELAYS.LONG);
+        return;
+      }
+    } catch (error) {
+      this.log(`JavaScript click failed: ${error}`, 'warning');
+    }
+
+    this.log('Warning: Could not find Search button to open filter panel', 'warning');
   }
 
   // ==========================================================================
@@ -265,9 +333,12 @@ export class ClubScraper {
 
     this.log(`  Finished ${filter.quality} ${filter.rarity}: scraped ${pageNum} page(s)`, 'success');
 
-    // Reset filters for next combination
+    // Reset filters and reopen filter panel for next combination
     await this.clickReset();
     await this.sleep(DELAYS.MEDIUM);
+
+    // Click Search button to reopen filter panel for next filter combination
+    await this.openSearchFilterPanel();
   }
 
   private async applyBaseFilters(): Promise<void> {
