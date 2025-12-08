@@ -9,6 +9,7 @@ import { SpeedProfileType } from './delays.js';
 import { inventoryService } from '../services/inventory.js';
 import { getTaskQueue } from '../services/task-queue.js';
 import { RecoveryService } from './recovery.js';
+import { analyticsService } from '../services/analytics.js';
 
 // ============================================================================
 // Types
@@ -116,6 +117,9 @@ export class TaskRunner {
     this.shouldStop = false;
     const results: TaskResult[] = [];
 
+    // Start analytics session
+    analyticsService.startSession();
+
     try {
       const config = loadConfig();
       const enabledTasks = config.dailyTasks.filter(t => t.enabled);
@@ -146,6 +150,12 @@ export class TaskRunner {
           skipResult.error = 'Dependency not met';
           results.push(skipResult);
           this.broadcastTaskStatus(skipResult);
+
+          // Track skipped task
+          analyticsService.recordTaskExecution(
+            task.id, task.cardTitle, task.taskType,
+            'skipped', 0, task.repeatCount, 'Dependency not met'
+          );
           continue;
         }
 
@@ -170,6 +180,8 @@ export class TaskRunner {
       this.log(`Error running tasks: ${error}`, 'error');
     } finally {
       this.isRunning = false;
+      // End analytics session
+      analyticsService.endSession();
     }
 
     return results;
@@ -224,6 +236,9 @@ export class TaskRunner {
     // Reset recovery state for this task
     this.resetRecoveryState();
 
+    // Start tracking this task
+    analyticsService.startTask(task.id);
+
     // Pre-task health check
     if (!await this.quickHealthCheck()) {
       this.log('Pre-task health check failed - attempting recovery...', 'warning');
@@ -232,6 +247,12 @@ export class TaskRunner {
         result.status = 'failed';
         result.error = 'Browser unresponsive - please restart';
         this.broadcastTaskStatus(result);
+
+        // Record failed execution
+        analyticsService.recordTaskExecution(
+          task.id, task.cardTitle, task.taskType,
+          'failed', 0, task.repeatCount, result.error
+        );
         return result;
       }
     }
@@ -263,6 +284,21 @@ export class TaskRunner {
       // Try to dismiss any blocking modals before next task
       await this.dismissModals();
     }
+
+    // Record task execution in analytics
+    const finalStatus = result.status as TaskStatus;
+    const analyticsStatus: 'completed' | 'failed' | 'skipped' =
+      finalStatus === 'completed' ? 'completed' :
+      finalStatus === 'skipped' ? 'skipped' : 'failed';
+    analyticsService.recordTaskExecution(
+      task.id,
+      task.cardTitle,
+      task.taskType,
+      analyticsStatus,
+      result.completedRepeats,
+      result.totalRepeats,
+      result.error
+    );
 
     this.broadcastTaskStatus(result);
     await this.navigateToSBCSafe();

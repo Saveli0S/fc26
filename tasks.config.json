@@ -4,7 +4,7 @@
       "id": "daily-bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Bronze Upgrade",
-      "repeatCount": 3,
+      "repeatCount": 1,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {

@@ -4,6 +4,7 @@ import { TaskConfig } from './components/TaskConfig';
 import { StatusLog } from './components/StatusLog';
 import { SessionReport } from './components/SessionReport';
 import { InventoryDialog } from './components/InventoryDialog';
+import { StatsDashboard } from './components/StatsDashboard';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api } from './hooks/useApi';
 import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules, InventorySummary, TaskSchedule } from './types';
@@ -73,6 +74,9 @@ function App() {
 	const [showInventory, setShowInventory] = useState(false);
 	const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
 	const [syncingInventory, setSyncingInventory] = useState(false);
+
+	// Tab state
+	const [activeTab, setActiveTab] = useState<'automation' | 'analytics'>('automation');
 
 	// Load credentials from secure storage on mount
 	useEffect(() => {
@@ -575,37 +579,63 @@ function App() {
 					</button>
 				</div>
 
-				{/* Main Grid */}
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-					{/* Left Column - Tasks */}
-					<div className="lg:col-span-2 space-y-6">
-						{config && (
-							<TaskList
-								tasks={config.dailyTasks}
-								taskResults={taskResults}
-								onToggleTask={handleToggleTask}
-								onUpdateRepeatCount={handleUpdateRepeatCount}
-								onUpdateSchedule={handleUpdateSchedule}
-								onRunTask={handleRunTask}
-								isRunning={status.isRunning}
-								browserReady={status.browserInitialized}
-							/>
-						)}
-
-						<StatusLog logs={logs} onClearLogs={() => setLogs([])} />
-					</div>
-
-					{/* Right Column - Config */}
-					<div>
-						{config && (
-							<TaskConfig
-								rules={config.squadBuilderRules}
-								onUpdateRules={handleUpdateRules}
-								onAddTask={handleAddTask}
-							/>
-						)}
-					</div>
+				{/* Tab Navigation */}
+				<div className="mb-6 flex gap-1 border-b border-ea-border">
+					<button
+						onClick={() => setActiveTab('automation')}
+						className={`px-6 py-3 text-sm font-medium transition-all border-b-2 -mb-px ${activeTab === 'automation'
+								? 'text-ea-green border-ea-green'
+								: 'text-gray-500 border-transparent hover:text-gray-300'
+							}`}
+					>
+						⚙️ Automation
+					</button>
+					<button
+						onClick={() => setActiveTab('analytics')}
+						className={`px-6 py-3 text-sm font-medium transition-all border-b-2 -mb-px ${activeTab === 'analytics'
+								? 'text-ea-blue border-ea-blue'
+								: 'text-gray-500 border-transparent hover:text-gray-300'
+							}`}
+					>
+						📊 Analytics
+					</button>
 				</div>
+
+				{/* Tab Content */}
+				{activeTab === 'automation' ? (
+					<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+						{/* Left Column - Tasks */}
+						<div className="lg:col-span-2 space-y-6">
+							{config && (
+								<TaskList
+									tasks={config.dailyTasks}
+									taskResults={taskResults}
+									onToggleTask={handleToggleTask}
+									onUpdateRepeatCount={handleUpdateRepeatCount}
+									onUpdateSchedule={handleUpdateSchedule}
+									onRunTask={handleRunTask}
+									isRunning={status.isRunning}
+									browserReady={status.browserInitialized}
+								/>
+							)}
+
+							<StatusLog logs={logs} onClearLogs={() => setLogs([])} />
+						</div>
+
+						{/* Right Column - Config */}
+						<div>
+							{config && (
+								<TaskConfig
+									rules={config.squadBuilderRules}
+									onUpdateRules={handleUpdateRules}
+									onAddTask={handleAddTask}
+								/>
+							)}
+						</div>
+					</div>
+				) : (
+					<StatsDashboard />
+				)}
 			</main>
 
 			{/* Footer */}

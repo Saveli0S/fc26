@@ -1,4 +1,4 @@
-import { Config, Task, AppStatus, InventorySummary, PlayerCard, ScheduleInfo, HealthCheckResult } from '../types';
+import { Config, Task, AppStatus, InventorySummary, PlayerCard, ScheduleInfo, HealthCheckResult, AnalyticsSummary, DailyStats, TaskStats, SessionSummary } from '../types';
 
 // In Electron (file://), use localhost explicitly
 const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
@@ -128,4 +128,20 @@ export const api = {
     }),
   getExecutionOrder: () =>
     fetchApi<Array<{ id: string; cardTitle: string; priority: number }>>('/tasks/execution-order'),
+
+  // Analytics
+  getAnalyticsSummary: (days = 30) =>
+    fetchApi<AnalyticsSummary>(`/analytics/summary?days=${days}`),
+  getDailyStats: (days = 7) =>
+    fetchApi<DailyStats[]>(`/analytics/daily?days=${days}`),
+  getTaskStats: () =>
+    fetchApi<TaskStats[]>('/analytics/tasks'),
+  getRecentSessions: (limit = 10) =>
+    fetchApi<SessionSummary[]>(`/analytics/sessions?limit=${limit}`),
+  exportAnalytics: () => `${API_BASE}/analytics/export`,
+  cleanupAnalytics: (daysToKeep = 90) =>
+    fetchApi<{ success: boolean; deletedRecords: number }>('/analytics/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ daysToKeep }),
+    }),
 };

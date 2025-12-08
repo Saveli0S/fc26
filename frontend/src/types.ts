@@ -91,6 +91,68 @@ export interface HealthCheckResult {
   reason: string;
 }
 
+// Analytics Types
+export interface TaskExecution {
+  id: string;
+  taskId: string;
+  taskName: string;
+  taskType: string;
+  status: 'completed' | 'failed' | 'skipped';
+  completedRepeats: number;
+  totalRepeats: number;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  error?: string;
+}
+
+export interface SessionSummary {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  skippedTasks: number;
+  totalRepeats: number;
+  completedRepeats: number;
+  durationMs: number;
+}
+
+export interface DailyStats {
+  date: string;
+  tasksCompleted: number;
+  tasksFailed: number;
+  tasksSkipped: number;
+  repeatsCompleted: number;
+  totalDurationMs: number;
+  sessions: number;
+}
+
+export interface TaskStats {
+  taskId: string;
+  taskName: string;
+  taskType: string;
+  totalExecutions: number;
+  successCount: number;
+  failCount: number;
+  skipCount: number;
+  successRate: number;
+  avgDurationMs: number;
+  totalRepeatsCompleted: number;
+}
+
+export interface AnalyticsSummary {
+  totalSessions: number;
+  totalTasksRun: number;
+  totalRepeatsCompleted: number;
+  overallSuccessRate: number;
+  avgSessionDurationMs: number;
+  dailyStats: DailyStats[];
+  taskStats: TaskStats[];
+  recentSessions: SessionSummary[];
+}
+
 // Card Inventory
 export interface PlayerCard {
   id: string;

@@ -8,6 +8,7 @@ import { ClubScraper } from './automation/club-scraper.js';
 import { inventoryService } from './services/inventory.js';
 import { getScheduler } from './services/scheduler.js';
 import { getTaskQueue } from './services/task-queue.js';
+import { analyticsService } from './services/analytics.js';
 
 const app = express();
 const server = createServer(app);
@@ -482,6 +483,76 @@ app.post('/api/inventory/sync/stop', (req, res) => {
       clubScraper.stop();
     }
     res.json({ success: true, message: 'Stop signal sent' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================================
+// Analytics API
+// ============================================================================
+
+// Get analytics summary
+app.get('/api/analytics/summary', (req, res) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const summary = analyticsService.getSummary(days);
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get daily stats
+app.get('/api/analytics/daily', (req, res) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const stats = analyticsService.getDailyStats(days);
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get task stats
+app.get('/api/analytics/tasks', (req, res) => {
+  try {
+    const stats = analyticsService.getTaskStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get recent sessions
+app.get('/api/analytics/sessions', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const sessions = analyticsService.getRecentSessions(limit);
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Export analytics data
+app.get('/api/analytics/export', (req, res) => {
+  try {
+    const data = analyticsService.exportData();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=analytics-${new Date().toISOString().split('T')[0]}.json`);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Clear old analytics data
+app.post('/api/analytics/cleanup', (req, res) => {
+  try {
+    const daysToKeep = parseInt(req.body.daysToKeep) || 90;
+    const deleted = analyticsService.clearOldData(daysToKeep);
+    res.json({ success: true, deletedRecords: deleted });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
