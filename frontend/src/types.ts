@@ -32,6 +32,13 @@ export interface TaskSchedule {
   daysOfWeek: number[]; // 0=Sunday, 6=Saturday
 }
 
+export interface SquadBuilderFilters {
+  quality?: 'Bronze' | 'Silver' | 'Gold' | 'Any';
+  rarity?: 'Common' | 'Rare' | 'Any';
+  ignorePosition?: boolean;
+  isRarityRequired?: boolean;
+}
+
 export interface Task {
   id: string;
   category: SBCCategoryType;
@@ -43,6 +50,8 @@ export interface Task {
   schedule?: TaskSchedule;
   priority?: number; // 0-100, higher = runs first
   dependsOn?: string[]; // Task IDs this depends on
+  // Squad builder filters
+  squadBuilderFilters?: SquadBuilderFilters;
 }
 
 export interface SquadBuilderRules {

@@ -192,3 +192,31 @@ export function removeTask(taskId: string): Config {
   saveConfig(config);
   return config;
 }
+
+export function reorderTasks(taskIds: string[]): Config {
+  const config = loadConfig();
+
+  // Create a map of tasks by ID
+  const taskMap = new Map(config.dailyTasks.map(t => [t.id, t]));
+
+  // Reorder based on the provided order
+  const reorderedTasks: Task[] = [];
+
+  // Add tasks in the specified order
+  for (const id of taskIds) {
+    const task = taskMap.get(id);
+    if (task) {
+      reorderedTasks.push(task);
+      taskMap.delete(id);
+    }
+  }
+
+  // Add any remaining tasks that weren't in the taskIds array
+  for (const task of taskMap.values()) {
+    reorderedTasks.push(task);
+  }
+
+  config.dailyTasks = reorderedTasks;
+  saveConfig(config);
+  return config;
+}

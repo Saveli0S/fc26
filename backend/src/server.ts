@@ -3,7 +3,7 @@ import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { TaskRunner, TaskResult } from './automation/task-runner.js';
-import { loadConfig, saveConfig, updateTask, addTask, removeTask, Config, Task, TaskSchedule } from './config/tasks.js';
+import { loadConfig, saveConfig, updateTask, addTask, removeTask, reorderTasks, Config, Task, TaskSchedule } from './config/tasks.js';
 import { ClubScraper } from './automation/club-scraper.js';
 import { inventoryService } from './services/inventory.js';
 import { getScheduler } from './services/scheduler.js';
@@ -158,6 +158,20 @@ app.delete('/api/tasks/:id', (req, res) => {
   try {
     const taskId = req.params.id;
     const config = removeTask(taskId);
+    res.json({ success: true, config });
+  } catch (error) {
+    res.status(400).json({ error: String(error) });
+  }
+});
+
+// Reorder tasks
+app.post('/api/tasks/reorder', (req, res) => {
+  try {
+    const { taskIds } = req.body;
+    if (!Array.isArray(taskIds)) {
+      return res.status(400).json({ error: 'taskIds must be an array' });
+    }
+    const config = reorderTasks(taskIds);
     res.json({ success: true, config });
   } catch (error) {
     res.status(400).json({ error: String(error) });

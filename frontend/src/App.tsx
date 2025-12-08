@@ -78,6 +78,21 @@ function App() {
 	// Tab state
 	const [activeTab, setActiveTab] = useState<'automation' | 'analytics'>('automation');
 
+	// Theme state
+	const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+		const saved = localStorage.getItem('fc26_theme');
+		return (saved === 'light' ? 'light' : 'dark') as 'dark' | 'light';
+	});
+
+	useEffect(() => {
+		document.documentElement.setAttribute('data-theme', theme);
+		localStorage.setItem('fc26_theme', theme);
+	}, [theme]);
+
+	const toggleTheme = () => {
+		setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+	};
+
 	// Load credentials from secure storage on mount
 	useEffect(() => {
 		secureCredentials.get().then((creds) => {
@@ -309,6 +324,47 @@ function App() {
 		}
 	};
 
+	const handleApplyTemplate = async (tasks: Omit<Task, 'id'>[]) => {
+		try {
+			const existingTitles = new Set(config?.dailyTasks.map((t) => t.cardTitle) || []);
+			let addedCount = 0;
+			let skippedCount = 0;
+
+			for (const taskData of tasks) {
+				// Skip if task with same cardTitle already exists
+				if (existingTitles.has(taskData.cardTitle)) {
+					skippedCount++;
+					continue;
+				}
+
+				const task: Task = {
+					...taskData,
+					id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+				};
+				await api.addTask(task);
+				existingTitles.add(taskData.cardTitle);
+				addedCount++;
+			}
+
+			await loadConfig();
+
+			if (skippedCount > 0) {
+				console.log(`Template applied: ${addedCount} added, ${skippedCount} skipped (already exist)`);
+			}
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to apply template');
+		}
+	};
+
+	const handleDeleteTask = async (taskId: string) => {
+		try {
+			await api.deleteTask(taskId);
+			await loadConfig();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to delete task');
+		}
+	};
+
 	const handleUpdateSchedule = async (taskId: string, schedule: TaskSchedule) => {
 		try {
 			await api.updateTaskSchedule(taskId, {
@@ -319,6 +375,15 @@ function App() {
 			await loadConfig();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to update schedule');
+		}
+	};
+
+	const handleReorderTasks = async (taskIds: string[]) => {
+		try {
+			await api.reorderTasks(taskIds);
+			await loadConfig();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to reorder tasks');
 		}
 	};
 
@@ -393,6 +458,15 @@ function App() {
 						</div>
 
 						<div className="flex items-center gap-3">
+							{/* Theme Toggle */}
+							<button
+								onClick={toggleTheme}
+								className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-900 border border-ea-border hover:bg-gray-800 transition-all"
+								title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+							>
+								{theme === 'dark' ? '🌙' : '☀️'}
+							</button>
+
 							{/* Kill Switch */}
 							<button
 								onClick={handleShutdown}
@@ -584,8 +658,8 @@ function App() {
 					<button
 						onClick={() => setActiveTab('automation')}
 						className={`px-6 py-3 text-sm font-medium transition-all border-b-2 -mb-px ${activeTab === 'automation'
-								? 'text-ea-green border-ea-green'
-								: 'text-gray-500 border-transparent hover:text-gray-300'
+							? 'text-ea-green border-ea-green'
+							: 'text-gray-500 border-transparent hover:text-gray-300'
 							}`}
 					>
 						⚙️ Automation
@@ -593,8 +667,8 @@ function App() {
 					<button
 						onClick={() => setActiveTab('analytics')}
 						className={`px-6 py-3 text-sm font-medium transition-all border-b-2 -mb-px ${activeTab === 'analytics'
-								? 'text-ea-blue border-ea-blue'
-								: 'text-gray-500 border-transparent hover:text-gray-300'
+							? 'text-ea-blue border-ea-blue'
+							: 'text-gray-500 border-transparent hover:text-gray-300'
 							}`}
 					>
 						📊 Analytics
@@ -614,6 +688,8 @@ function App() {
 									onUpdateRepeatCount={handleUpdateRepeatCount}
 									onUpdateSchedule={handleUpdateSchedule}
 									onRunTask={handleRunTask}
+									onReorderTasks={handleReorderTasks}
+									onDeleteTask={handleDeleteTask}
 									isRunning={status.isRunning}
 									browserReady={status.browserInitialized}
 								/>
@@ -629,6 +705,7 @@ function App() {
 									rules={config.squadBuilderRules}
 									onUpdateRules={handleUpdateRules}
 									onAddTask={handleAddTask}
+									onApplyTemplate={handleApplyTemplate}
 								/>
 							)}
 						</div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Task, SquadBuilderRules, SBCCategory, TaskType, SpeedProfile, SBCCategoryType, TaskTypeType, SpeedProfileType } from '../types';
+import { taskTemplates, TaskTemplate } from '../data/templates';
 
 // Speed profile display labels and descriptions
 const speedProfileInfo: Record<SpeedProfileType, { label: string; description: string; color: string }> = {
@@ -29,17 +30,25 @@ interface TaskConfigProps {
 	rules: SquadBuilderRules;
 	onUpdateRules: (rules: SquadBuilderRules) => void;
 	onAddTask: (task: Task) => void;
+	onApplyTemplate: (tasks: Omit<Task, 'id'>[]) => void;
 }
 
-export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps) {
+export function TaskConfig({ rules, onUpdateRules, onAddTask, onApplyTemplate }: TaskConfigProps) {
 	const [isAddingTask, setIsAddingTask] = useState(false);
 	const [isRulesCollapsed, setIsRulesCollapsed] = useState(true); // Collapsed by default
+	const [isTemplatesCollapsed, setIsTemplatesCollapsed] = useState(false);
 	const [newTask, setNewTask] = useState<Partial<Task>>({
 		category: SBCCategory.Upgrades,
 		repeatCount: 1,
 		enabled: true,
 		taskType: TaskType.Daily,
 	});
+
+	const handleApplyTemplate = (template: TaskTemplate) => {
+		if (confirm(`Apply "${template.name}" template? This will add ${template.tasks.length} tasks.`)) {
+			onApplyTemplate(template.tasks);
+		}
+	};
 
 	const handleRuleChange = (key: keyof SquadBuilderRules, value: any) => {
 		onUpdateRules({ ...rules, [key]: value });
@@ -64,6 +73,61 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps)
 
 	return (
 		<div className="space-y-6">
+			{/* Task Templates */}
+			<div className="bg-[#131820] border border-ea-border rounded-lg overflow-hidden">
+				<button
+					onClick={() => setIsTemplatesCollapsed(!isTemplatesCollapsed)}
+					className="w-full px-4 py-3 border-b border-ea-border flex items-center justify-between hover:bg-gray-800/30 transition-colors"
+				>
+					<div className="flex items-center gap-2">
+						<svg
+							className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isTemplatesCollapsed ? '' : 'rotate-90'}`}
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke="currentColor"
+						>
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+						</svg>
+						<h3 className="text-sm font-medium text-gray-300">📋 Task Templates</h3>
+					</div>
+					<span className="text-xs text-gray-500">
+						{taskTemplates.length} available
+					</span>
+				</button>
+
+				{!isTemplatesCollapsed && (
+					<div className="p-3 grid grid-cols-1 gap-2">
+						{taskTemplates.map((template) => (
+							<button
+								key={template.id}
+								onClick={() => handleApplyTemplate(template)}
+								className="p-3 bg-gray-900/50 border border-ea-border rounded-lg text-left hover:border-ea-green/50 hover:bg-gray-900 transition-all group"
+							>
+								<div className="flex items-center gap-2">
+									<span className="text-lg">{template.icon}</span>
+									<div className="flex-1 min-w-0">
+										<div className="text-sm font-medium text-white group-hover:text-ea-green transition-colors">
+											{template.name}
+										</div>
+										<div className="text-xs text-gray-500">
+											{template.description} • {template.tasks.length} tasks
+										</div>
+									</div>
+									<svg
+										className="w-4 h-4 text-gray-600 group-hover:text-ea-green transition-colors"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+									</svg>
+								</div>
+							</button>
+						))}
+					</div>
+				)}
+			</div>
+
 			{/* Squad Builder Rules */}
 			<div className="bg-[#131820] border border-ea-border rounded-lg overflow-hidden">
 				<button

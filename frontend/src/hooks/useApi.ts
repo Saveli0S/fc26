@@ -45,6 +45,11 @@ export const api = {
     fetchApi<{ success: boolean }>(`/tasks/${id}`, {
       method: 'DELETE',
     }),
+  reorderTasks: (taskIds: string[]) =>
+    fetchApi<{ success: boolean }>('/tasks/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ taskIds }),
+    }),
 
   // Browser
   initBrowser: () =>

@@ -101,6 +101,21 @@
       "priority": 50
     },
     {
+      "id": "gold-upgrade",
+      "category": "Upgrades",
+      "cardTitle": "Gold Upgrade",
+      "repeatCount": 2,
+      "enabled": false,
+      "taskType": "optional",
+      "squadBuilderFilters": {
+        "quality": "Gold",
+        "rarity": "Common",
+        "ignorePosition": true,
+        "isRarityRequired": false
+      },
+      "priority": 50
+    },
+    {
       "id": "prime-bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Prime Bronze Players Upgrade",
@@ -143,21 +158,6 @@
           "rarity": "Common",
           "isPositionDefined": false
         }
-      },
-      "priority": 50
-    },
-    {
-      "id": "gold-upgrade",
-      "category": "Upgrades",
-      "cardTitle": "Gold Upgrade",
-      "repeatCount": 2,
-      "enabled": false,
-      "taskType": "optional",
-      "squadBuilderFilters": {
-        "quality": "Gold",
-        "rarity": "Common",
-        "ignorePosition": true,
-        "isRarityRequired": false
       },
       "priority": 50
     },
