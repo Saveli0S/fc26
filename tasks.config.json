@@ -12,7 +12,20 @@
         "rarity": "Common",
         "ignorePosition": true,
         "isRarityRequired": false
-      }
+      },
+      "schedule": {
+        "enabled": false,
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "priority": 50
     },
     {
       "id": "daily-silver-upgrade",
@@ -26,7 +39,8 @@
         "rarity": "Common",
         "ignorePosition": true,
         "isRarityRequired": false
-      }
+      },
+      "priority": 50
     },
     {
       "id": "daily-rare-gold-upgrade",
@@ -40,7 +54,8 @@
         "rarity": "Common",
         "ignorePosition": true,
         "isRarityRequired": false
-      }
+      },
+      "priority": 50
     },
     {
       "id": "bronze-upgrade",
@@ -54,7 +69,21 @@
         "rarity": "Common",
         "ignorePosition": true,
         "isRarityRequired": false
-      }
+      },
+      "schedule": {
+        "enabled": false,
+        "time": "10:25",
+        "daysOfWeek": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "priority": 50
     },
     {
       "id": "silver-upgrade-3x",
@@ -68,7 +97,8 @@
         "rarity": "Common",
         "ignorePosition": true,
         "isRarityRequired": false
-      }
+      },
+      "priority": 50
     },
     {
       "id": "prime-bronze-upgrade",
@@ -90,7 +120,8 @@
           "rarity": "Common",
           "isPositionDefined": false
         }
-      }
+      },
+      "priority": 50
     },
     {
       "id": "prime-silver-upgrade",
@@ -112,7 +143,8 @@
           "rarity": "Common",
           "isPositionDefined": false
         }
-      }
+      },
+      "priority": 50
     },
     {
       "id": "gold-upgrade",
@@ -126,7 +158,8 @@
         "rarity": "Common",
         "ignorePosition": true,
         "isRarityRequired": false
-      }
+      },
+      "priority": 50
     },
     {
       "id": "daily-common-gold-upgrade",
@@ -148,7 +181,8 @@
           "rarity": "Common",
           "isPositionDefined": false
         }
-      }
+      },
+      "priority": 50
     }
   ],
   "squadBuilderRules": {

@@ -7,6 +7,7 @@ import { UIHelper, EA_SELECTORS } from './ui-helpers.js';
 import { loadConfig, Task, SquadBuilderRules, TaskType, SpeedProfile } from '../config/tasks.js';
 import { SpeedProfileType } from './delays.js';
 import { inventoryService } from '../services/inventory.js';
+import { getTaskQueue } from '../services/task-queue.js';
 
 // ============================================================================
 // Types
@@ -114,23 +115,46 @@ export class TaskRunner {
       this.browserManager.setSpeedProfile(speedProfile);
       this.log(`Speed profile: ${speedProfile}`, 'info');
 
-      this.log(`Running ${enabledTasks.length} tasks...`, 'info');
+      // Use TaskQueue for priority/dependency ordering
+      const taskQueue = getTaskQueue(this.log);
+      taskQueue.reset();
+      const orderedTasks = taskQueue.buildExecutionOrder(enabledTasks);
 
-      for (const task of enabledTasks) {
+      this.log(`Running ${orderedTasks.length} tasks (priority ordered)...`, 'info');
+
+      for (const task of orderedTasks) {
         if (this.shouldStop) {
           this.log('Execution stopped by user', 'warning');
           break;
         }
 
+        // Check dependencies
+        if (!taskQueue.canRun(task)) {
+          this.log(`Skipping "${task.cardTitle}" - dependency not met`, 'warning');
+          const skipResult = this.createResult(task);
+          skipResult.status = 'skipped';
+          skipResult.error = 'Dependency not met';
+          results.push(skipResult);
+          this.broadcastTaskStatus(skipResult);
+          continue;
+        }
+
         const result = await this.runTask(task, config.squadBuilderRules);
         results.push(result);
+
+        // Update queue state
+        if (result.status === 'completed') {
+          taskQueue.markCompleted(task.id);
+        } else if (result.status === 'failed') {
+          taskQueue.markFailed(task.id);
+        }
 
         await this.sbcNavigator.goBack();
         await this.sleep(CONFIG.DELAYS.AFTER_NAVIGATION);
       }
 
       const completed = results.filter(r => r.status === 'completed').length;
-      this.log(`Completed ${completed}/${enabledTasks.length} tasks`, 'success');
+      this.log(`Completed ${completed}/${orderedTasks.length} tasks`, 'success');
 
     } catch (error) {
       this.log(`Error running tasks: ${error}`, 'error');

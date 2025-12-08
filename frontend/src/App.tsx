@@ -6,7 +6,7 @@ import { SessionReport } from './components/SessionReport';
 import { InventoryDialog } from './components/InventoryDialog';
 import { useWebSocket } from './hooks/useWebSocket';
 import { api } from './hooks/useApi';
-import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules, InventorySummary } from './types';
+import { Config, LogEntry, TaskResult, AppStatus, Task, SquadBuilderRules, InventorySummary, TaskSchedule } from './types';
 
 // Check if running in Electron with secure storage
 const isElectron = !!window.electronAPI?.credentials;
@@ -300,6 +300,19 @@ function App() {
 		}
 	};
 
+	const handleUpdateSchedule = async (taskId: string, schedule: TaskSchedule) => {
+		try {
+			await api.updateTaskSchedule(taskId, {
+				enabled: schedule.enabled,
+				time: schedule.time,
+				daysOfWeek: schedule.daysOfWeek,
+			});
+			await loadConfig();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to update schedule');
+		}
+	};
+
 	// Inventory handlers
 	const loadInventorySummary = async () => {
 		try {
@@ -379,6 +392,17 @@ function App() {
 							>
 								⚡ Kill All
 							</button>
+
+							{/* Scheduler Status */}
+							<div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-900 border border-ea-border">
+								<div
+									className={`w-2 h-2 rounded-full ${status.schedulerRunning ? 'bg-violet-500' : 'bg-gray-600'
+										}`}
+								/>
+								<span className="text-xs text-gray-400">
+									{status.schedulerRunning ? 'Scheduler On' : 'Scheduler Off'}
+								</span>
+							</div>
 
 							{/* Connection Status */}
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-900 border border-ea-border">
@@ -551,6 +575,7 @@ function App() {
 								taskResults={taskResults}
 								onToggleTask={handleToggleTask}
 								onUpdateRepeatCount={handleUpdateRepeatCount}
+								onUpdateSchedule={handleUpdateSchedule}
 								onRunTask={handleRunTask}
 								isRunning={status.isRunning}
 								browserReady={status.browserInitialized}

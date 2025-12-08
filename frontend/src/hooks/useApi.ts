@@ -1,4 +1,4 @@
-import { Config, Task, AppStatus, InventorySummary, PlayerCard } from '../types';
+import { Config, Task, AppStatus, InventorySummary, PlayerCard, ScheduleInfo } from '../types';
 
 // In Electron (file://), use localhost explicitly
 const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
@@ -101,4 +101,26 @@ export const api = {
     fetchApi<{ success: boolean; message: string }>('/inventory/sync/stop', {
       method: 'POST',
     }),
+
+  // Scheduler
+  getSchedules: () => fetchApi<ScheduleInfo[]>('/scheduler/schedules'),
+  startScheduler: () =>
+    fetchApi<{ success: boolean; message: string }>('/scheduler/start', {
+      method: 'POST',
+    }),
+  stopScheduler: () =>
+    fetchApi<{ success: boolean; message: string }>('/scheduler/stop', {
+      method: 'POST',
+    }),
+  refreshSchedules: () =>
+    fetchApi<{ success: boolean; message: string }>('/scheduler/refresh', {
+      method: 'POST',
+    }),
+  updateTaskSchedule: (taskId: string, schedule: { enabled: boolean; time?: string; daysOfWeek?: number[] }) =>
+    fetchApi<{ success: boolean; message: string }>(`/tasks/${taskId}/schedule`, {
+      method: 'PUT',
+      body: JSON.stringify(schedule),
+    }),
+  getExecutionOrder: () =>
+    fetchApi<Array<{ id: string; cardTitle: string; priority: number }>>('/tasks/execution-order'),
 };

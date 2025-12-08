@@ -26,6 +26,12 @@ export type SBCCategoryType = typeof SBCCategory[keyof typeof SBCCategory];
 export type TaskTypeType = typeof TaskType[keyof typeof TaskType];
 export type SpeedProfileType = typeof SpeedProfile[keyof typeof SpeedProfile];
 
+export interface TaskSchedule {
+  enabled: boolean;
+  time?: string; // HH:MM format
+  daysOfWeek: number[]; // 0=Sunday, 6=Saturday
+}
+
 export interface Task {
   id: string;
   category: SBCCategoryType;
@@ -33,6 +39,10 @@ export interface Task {
   repeatCount: number;
   enabled: boolean;
   taskType: TaskTypeType;
+  // Scheduling and automation
+  schedule?: TaskSchedule;
+  priority?: number; // 0-100, higher = runs first
+  dependsOn?: string[]; // Task IDs this depends on
 }
 
 export interface SquadBuilderRules {
@@ -67,6 +77,13 @@ export interface TaskResult {
 export interface AppStatus {
   browserInitialized: boolean;
   isRunning: boolean;
+  schedulerRunning?: boolean;
+}
+
+export interface ScheduleInfo {
+  taskId: string;
+  cronExpression: string;
+  nextRun: string | null;
 }
 
 // Card Inventory

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Task, TaskResult, TaskType, TaskTypeType } from '../types';
+import { Task, TaskResult, TaskType, TaskTypeType, TaskSchedule } from '../types';
 
 interface TaskListProps {
 	tasks: Task[];
 	taskResults: Map<string, TaskResult>;
 	onToggleTask: (taskId: string, enabled: boolean) => void;
 	onUpdateRepeatCount: (taskId: string, repeatCount: number) => void;
+	onUpdateSchedule: (taskId: string, schedule: TaskSchedule) => void;
 	onRunTask: (taskId: string) => void;
 	isRunning: boolean;
 	browserReady: boolean;
@@ -41,11 +42,14 @@ const taskTypeLabels: Record<TaskTypeType, string> = {
 
 const taskTypeOrder: TaskTypeType[] = [TaskType.Daily, TaskType.Optional, TaskType.Complex];
 
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 export function TaskList({
 	tasks,
 	taskResults,
 	onToggleTask,
 	onUpdateRepeatCount,
+	onUpdateSchedule,
 	onRunTask,
 	isRunning,
 	browserReady,
@@ -53,6 +57,7 @@ export function TaskList({
 	const [expandedSections, setExpandedSections] = useState<Set<TaskTypeType>>(
 		new Set(taskTypeOrder)
 	);
+	const [expandedSchedules, setExpandedSchedules] = useState<Set<string>>(new Set());
 
 	const toggleSection = (taskType: TaskTypeType) => {
 		setExpandedSections((prev) => {
@@ -100,80 +105,207 @@ export function TaskList({
 		return taskTypeColors[taskType] || taskTypeColors[TaskType.Daily];
 	};
 
+	const toggleScheduleExpanded = (taskId: string) => {
+		setExpandedSchedules((prev) => {
+			const next = new Set(prev);
+			if (next.has(taskId)) {
+				next.delete(taskId);
+			} else {
+				next.add(taskId);
+			}
+			return next;
+		});
+	};
+
+	const handleScheduleToggle = (task: Task, enabled: boolean) => {
+		const currentSchedule = task.schedule || { enabled: false, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
+		onUpdateSchedule(task.id, { ...currentSchedule, enabled });
+	};
+
+	const handleScheduleTimeChange = (task: Task, time: string) => {
+		const currentSchedule = task.schedule || { enabled: false, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
+		onUpdateSchedule(task.id, { ...currentSchedule, time });
+	};
+
+	const handleScheduleDayToggle = (task: Task, day: number) => {
+		const currentSchedule = task.schedule || { enabled: false, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
+		const days = currentSchedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+		const newDays = days.includes(day)
+			? days.filter((d) => d !== day)
+			: [...days, day].sort((a, b) => a - b);
+		onUpdateSchedule(task.id, { ...currentSchedule, daysOfWeek: newDays });
+	};
+
 	const renderTaskItem = (task: Task) => {
 		const typeStyle = getTaskTypeStyle(task.taskType || TaskType.Daily);
+		const isScheduleExpanded = expandedSchedules.has(task.id);
+		const schedule = task.schedule || { enabled: false, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
+
 		return (
-			<div
-				key={task.id}
-				className={`p-4 flex items-center gap-4 transition-colors ${task.enabled ? 'bg-transparent' : 'bg-gray-900/50'}`}
-				style={{ borderLeft: `4px solid ${typeStyle.borderColor}` }}
-			>
-				{/* Enable/Disable Toggle */}
-				<button
-					onClick={() => onToggleTask(task.id, !task.enabled)}
-					className={`relative w-10 h-5 rounded-full transition-colors ${task.enabled ? 'bg-ea-green' : 'bg-gray-700'}`}
+			<div key={task.id}>
+				<div
+					className={`p-4 flex items-center gap-4 transition-colors ${task.enabled ? 'bg-transparent' : 'bg-gray-900/50'}`}
+					style={{ borderLeft: `4px solid ${typeStyle.borderColor}` }}
 				>
-					<div
-						className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${task.enabled ? 'translate-x-5' : 'translate-x-0.5'}`}
-					/>
-				</button>
+					{/* Enable/Disable Toggle */}
+					<button
+						onClick={() => onToggleTask(task.id, !task.enabled)}
+						className={`relative w-10 h-5 rounded-full transition-colors ${task.enabled ? 'bg-ea-green' : 'bg-gray-700'}`}
+					>
+						<div
+							className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${task.enabled ? 'translate-x-5' : 'translate-x-0.5'}`}
+						/>
+					</button>
 
-				{/* Task Info */}
-				<div className="flex-1 min-w-0">
-					<div className="flex items-center gap-2">
-						<span className={`font-medium ${task.enabled ? 'text-white' : 'text-gray-500'}`}>
-							{task.cardTitle}
+					{/* Task Info */}
+					<div className="flex-1 min-w-0">
+						<div className="flex items-center gap-2">
+							<span className={`font-medium ${task.enabled ? 'text-white' : 'text-gray-500'}`}>
+								{task.cardTitle}
+							</span>
+							{getStatusBadge(task.id)}
+							{schedule.enabled && schedule.time && (
+								<span className="px-1.5 py-0.5 rounded text-xs bg-violet-500/20 text-violet-400 border border-violet-500/30">
+									⏰ {schedule.time}
+								</span>
+							)}
+						</div>
+						<div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+							<span>{task.category}</span>
+							{task.priority !== undefined && task.priority !== 50 && (
+								<span className="text-amber-500">P{task.priority}</span>
+							)}
+						</div>
+					</div>
+
+					{/* Schedule Button */}
+					<button
+						onClick={() => toggleScheduleExpanded(task.id)}
+						className={`w-8 h-8 flex items-center justify-center rounded transition-all ${isScheduleExpanded
+							? 'bg-violet-500/20 text-violet-400'
+							: schedule.enabled
+								? 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+								: 'bg-gray-800 text-gray-500 hover:text-gray-300'
+							}`}
+						title="Schedule"
+					>
+						<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					</button>
+
+					{/* Repeat Count Controls */}
+					<div className="flex items-center gap-1">
+						<button
+							onClick={() => onUpdateRepeatCount(task.id, Math.max(1, task.repeatCount - 1))}
+							disabled={task.repeatCount <= 1 || isRunning}
+							className="w-6 h-6 flex items-center justify-center rounded bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
+						>
+							−
+						</button>
+						<span className="w-8 text-center text-sm text-gray-300 font-medium">
+							{task.repeatCount}x
 						</span>
-						{getStatusBadge(task.id)}
+						<button
+							onClick={() => onUpdateRepeatCount(task.id, Math.min(99, task.repeatCount + 1))}
+							disabled={task.repeatCount >= 99 || isRunning}
+							className="w-6 h-6 flex items-center justify-center rounded bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
+						>
+							+
+						</button>
 					</div>
-					<div className="text-xs text-gray-500 mt-0.5">
-						{task.category}
-					</div>
-				</div>
 
-				{/* Repeat Count Controls */}
-				<div className="flex items-center gap-1">
+					{/* Run Button */}
 					<button
-						onClick={() => onUpdateRepeatCount(task.id, Math.max(1, task.repeatCount - 1))}
-						disabled={task.repeatCount <= 1 || isRunning}
-						className="w-6 h-6 flex items-center justify-center rounded bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
+						onClick={() => onRunTask(task.id)}
+						disabled={!browserReady || isRunning || !task.enabled}
+						className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${!browserReady || isRunning || !task.enabled
+							? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+							: 'bg-ea-green/10 text-ea-green border border-ea-green/30 hover:bg-ea-green/20'
+							}`}
 					>
-						−
-					</button>
-					<span className="w-8 text-center text-sm text-gray-300 font-medium">
-						{task.repeatCount}x
-					</span>
-					<button
-						onClick={() => onUpdateRepeatCount(task.id, Math.min(99, task.repeatCount + 1))}
-						disabled={task.repeatCount >= 99 || isRunning}
-						className="w-6 h-6 flex items-center justify-center rounded bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold"
-					>
-						+
+						Run
 					</button>
 				</div>
 
-				{/* Run Button */}
-				<button
-					onClick={() => onRunTask(task.id)}
-					disabled={!browserReady || isRunning || !task.enabled}
-					className={`px-3 py-1.5 rounded text-sm font-medium transition-all ${!browserReady || isRunning || !task.enabled
-						? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-						: 'bg-ea-green/10 text-ea-green border border-ea-green/30 hover:bg-ea-green/20'
-						}`}
-				>
-					Run
-				</button>
+				{/* Schedule Panel */}
+				{isScheduleExpanded && (
+					<div className="px-4 py-3 bg-gray-900/50 border-t border-ea-border" style={{ borderLeft: `4px solid ${typeStyle.borderColor}` }}>
+						<div className="flex items-center gap-4 flex-wrap">
+							{/* Schedule Enable Toggle */}
+							<label className="flex items-center gap-2 cursor-pointer">
+								<input
+									type="checkbox"
+									checked={schedule.enabled}
+									onChange={(e) => handleScheduleToggle(task, e.target.checked)}
+									className="w-4 h-4 rounded border-ea-border bg-[#0a0e14] text-violet-500 focus:ring-violet-500 focus:ring-offset-0"
+								/>
+								<span className="text-sm text-gray-300">Daily Schedule</span>
+							</label>
+
+							{/* Time Picker */}
+							<div className="flex items-center gap-2">
+								<span className="text-xs text-gray-500">Run at:</span>
+								<input
+									type="time"
+									value={schedule.time || '06:00'}
+									onChange={(e) => handleScheduleTimeChange(task, e.target.value)}
+									disabled={!schedule.enabled}
+									className="px-2 py-1 rounded bg-[#0a0e14] border border-ea-border text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:border-violet-500"
+								/>
+							</div>
+
+							{/* Day Selector */}
+							<div className="flex items-center gap-1">
+								{DAY_LABELS.map((label, idx) => {
+									const isActive = (schedule.daysOfWeek || [0, 1, 2, 3, 4, 5, 6]).includes(idx);
+									return (
+										<button
+											key={idx}
+											onClick={() => handleScheduleDayToggle(task, idx)}
+											disabled={!schedule.enabled}
+											className={`w-7 h-7 text-xs rounded font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isActive
+												? 'bg-violet-500/20 text-violet-400 border border-violet-500/30'
+												: 'bg-gray-800 text-gray-500 hover:text-gray-300'
+												}`}
+										>
+											{label}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 		);
 	};
 
+	const [isCollapsed, setIsCollapsed] = useState(false);
+
 	return (
 		<div className="bg-[#131820] border border-ea-border rounded-lg overflow-hidden">
-			<div className="px-4 py-3 border-b border-ea-border">
-				<h3 className="text-sm font-medium text-gray-300">Tasks</h3>
-			</div>
+			<button
+				onClick={() => setIsCollapsed(!isCollapsed)}
+				className="w-full px-4 py-3 border-b border-ea-border flex items-center justify-between hover:bg-gray-800/30 transition-colors"
+			>
+				<div className="flex items-center gap-2">
+					<svg
+						className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke="currentColor"
+					>
+						<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+					</svg>
+					<h3 className="text-sm font-medium text-gray-300">Tasks</h3>
+				</div>
+				<span className="text-xs text-gray-500">
+					{tasks.filter(t => t.enabled).length}/{tasks.length} enabled
+				</span>
+			</button>
 
-			{tasks.length === 0 ? (
+			{!isCollapsed && (tasks.length === 0 ? (
 				<div className="p-8 text-center text-gray-500">
 					No tasks configured. Add tasks in tasks.config.json
 				</div>
@@ -220,13 +352,13 @@ export function TaskList({
 								<div
 									className={`divide-y divide-ea-border overflow-hidden transition-all duration-200 ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
 								>
-									{tasksInGroup.map(renderTaskItem)}
-								</div>
+								{tasksInGroup.map(renderTaskItem)}
 							</div>
-						);
-					})}
-				</div>
-			)}
-		</div>
-	);
+						</div>
+					);
+				})}
+			</div>
+		))}
+	</div>
+);
 }

@@ -3,9 +3,11 @@ import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { TaskRunner, TaskResult } from './automation/task-runner.js';
-import { loadConfig, saveConfig, updateTask, addTask, removeTask, Config, Task } from './config/tasks.js';
+import { loadConfig, saveConfig, updateTask, addTask, removeTask, Config, Task, TaskSchedule } from './config/tasks.js';
 import { ClubScraper } from './automation/club-scraper.js';
 import { inventoryService } from './services/inventory.js';
+import { getScheduler } from './services/scheduler.js';
+import { getTaskQueue } from './services/task-queue.js';
 
 const app = express();
 const server = createServer(app);
@@ -50,6 +52,27 @@ function broadcastTaskStatus(result: TaskResult) {
     }
   });
 }
+
+// Initialize scheduler with broadcast logging
+const scheduler = getScheduler(broadcastLog);
+const taskQueue = getTaskQueue(broadcastLog);
+
+// Set up scheduler to run tasks
+scheduler.setTaskRunner(async (taskId: string) => {
+  if (!taskRunner) {
+    broadcastLog('Scheduled task skipped: browser not initialized', 'warning');
+    return;
+  }
+  if (taskRunner.getIsRunning()) {
+    broadcastLog('Scheduled task skipped: another task is running', 'warning');
+    return;
+  }
+  broadcastLog(`Running scheduled task: ${taskId}`, 'info');
+  const result = await taskRunner.runSingleTask(taskId);
+  if (result) {
+    broadcastTaskStatus(result);
+  }
+});
 
 // WebSocket connection handler
 wss.on('connection', (ws) => {
@@ -106,6 +129,12 @@ app.patch('/api/tasks/:id', (req, res) => {
     const taskId = req.params.id;
     const updates = req.body;
     const config = updateTask(taskId, updates);
+
+    // Refresh scheduler if schedule was updated
+    if (updates.schedule !== undefined) {
+      scheduler.refreshSchedules();
+    }
+
     res.json({ success: true, config });
   } catch (error) {
     res.status(400).json({ error: String(error) });
@@ -273,7 +302,87 @@ app.get('/api/status', (req, res) => {
   res.json({
     browserInitialized: taskRunner !== null,
     isRunning: taskRunner?.getIsRunning() || false,
+    schedulerRunning: scheduler.getIsRunning(),
   });
+});
+
+// ============================================================================
+// Scheduler API
+// ============================================================================
+
+// Get active schedules
+app.get('/api/scheduler/schedules', (req, res) => {
+  try {
+    const schedules = scheduler.getActiveSchedules();
+    res.json(schedules);
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Start scheduler
+app.post('/api/scheduler/start', (req, res) => {
+  try {
+    scheduler.initialize();
+    res.json({ success: true, message: 'Scheduler started' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Stop scheduler
+app.post('/api/scheduler/stop', (req, res) => {
+  try {
+    scheduler.stop();
+    res.json({ success: true, message: 'Scheduler stopped' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Refresh schedules from config
+app.post('/api/scheduler/refresh', (req, res) => {
+  try {
+    scheduler.refreshSchedules();
+    res.json({ success: true, message: 'Schedules refreshed' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Update task schedule directly
+app.put('/api/tasks/:id/schedule', (req, res) => {
+  try {
+    const taskId = req.params.id;
+    const { enabled, time, daysOfWeek } = req.body as { enabled: boolean; time?: string; daysOfWeek?: number[] };
+
+    // Update task in config
+    const schedule: TaskSchedule = {
+      enabled,
+      time,
+      daysOfWeek: daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+    };
+    updateTask(taskId, { schedule });
+
+    // Update scheduler
+    scheduler.updateTaskSchedule(taskId, enabled, time, daysOfWeek);
+
+    res.json({ success: true, message: 'Schedule updated' });
+  } catch (error) {
+    res.status(400).json({ error: String(error) });
+  }
+});
+
+// Get task execution order (with priority/dependencies)
+app.get('/api/tasks/execution-order', (req, res) => {
+  try {
+    const config = loadConfig();
+    const enabledTasks = config.dailyTasks.filter((t) => t.enabled);
+    const order = taskQueue.buildExecutionOrder(enabledTasks);
+    res.json(order.map((t) => ({ id: t.id, cardTitle: t.cardTitle, priority: t.priority || 50 })));
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
 });
 
 // ============================================================================
@@ -357,11 +466,16 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`WebSocket available on ws://localhost:${PORT}`);
+
+  // Initialize scheduler on startup
+  scheduler.initialize();
+  console.log('Scheduler initialized');
 });
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\nShutting down...');
+  scheduler.stop();
   if (taskRunner) {
     await taskRunner.close();
   }

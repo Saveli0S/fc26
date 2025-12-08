@@ -70,10 +70,18 @@ export const SquadBuilderFiltersSchema = z.object({
 export type CardRequirement = z.infer<typeof CardRequirementSchema>;
 export type ComplexTaskConfig = z.infer<typeof ComplexTaskConfigSchema>;
 export type SquadBuilderFilters = z.infer<typeof SquadBuilderFiltersSchema>;
+export type TaskSchedule = z.infer<typeof TaskScheduleSchema>;
 
 // Extract enum values for Zod schema
 const sbcCategoryValues = Object.values(SBCCategory) as [string, ...string[]];
 const taskTypeValues = Object.values(TaskType) as [string, ...string[]];
+
+// Schedule configuration for a task
+export const TaskScheduleSchema = z.object({
+  enabled: z.boolean().default(false),
+  time: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(), // HH:MM format
+  daysOfWeek: z.array(z.number().min(0).max(6)).default([0, 1, 2, 3, 4, 5, 6]), // 0=Sunday, 6=Saturday
+});
 
 export const TaskSchema = z.object({
   id: z.string(),
@@ -84,6 +92,10 @@ export const TaskSchema = z.object({
   taskType: z.enum(taskTypeValues).default(TaskType.Daily),
   complexConfig: ComplexTaskConfigSchema.optional(),
   squadBuilderFilters: SquadBuilderFiltersSchema.optional(),
+  // Scheduling and automation
+  schedule: TaskScheduleSchema.optional(),
+  priority: z.number().min(0).max(100).default(50), // Higher = runs first
+  dependsOn: z.array(z.string()).optional(), // Task IDs this depends on
 });
 
 // Extract speed profile values for Zod schema
@@ -122,6 +134,7 @@ export function loadConfig(): Config {
           repeatCount: 1,
           enabled: true,
           taskType: 'daily',
+          priority: 50,
         },
       ],
       squadBuilderRules: {
