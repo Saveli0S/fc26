@@ -5,6 +5,7 @@ import { createServer } from 'http';
 import { TaskRunner, TaskResult } from './automation/task-runner.js';
 import { loadConfig, saveConfig, updateTask, addTask, removeTask, reorderTasks, Config, Task, TaskSchedule } from './config/tasks.js';
 import { ClubScraper } from './automation/club-scraper.js';
+import { PackOpener } from './automation/pack-opener.js';
 import { inventoryService } from './services/inventory.js';
 import { getScheduler } from './services/scheduler.js';
 import { getTaskQueue } from './services/task-queue.js';
@@ -25,6 +26,9 @@ let taskRunner: TaskRunner | null = null;
 
 // Club scraper instance
 let clubScraper: ClubScraper | null = null;
+
+// Pack opener instance
+let packOpener: PackOpener | null = null;
 
 // Broadcast log message to all connected clients
 function broadcastLog(message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info') {
@@ -495,6 +499,55 @@ app.post('/api/inventory/sync/stop', (req, res) => {
   try {
     if (clubScraper) {
       clubScraper.stop();
+    }
+    res.json({ success: true, message: 'Stop signal sent' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// ============================================================================
+// Pack Opener API
+// ============================================================================
+
+// Open all packs
+app.post('/api/packs/open', async (req, res) => {
+  try {
+    if (!taskRunner) {
+      return res.status(400).json({ error: 'Browser not initialized' });
+    }
+
+    if (packOpener) {
+      return res.status(400).json({ error: 'Pack opener already running' });
+    }
+
+    if (taskRunner.getIsRunning()) {
+      return res.status(400).json({ error: 'Cannot open packs while tasks are running' });
+    }
+
+    // Create pack opener with browser manager from task runner
+    packOpener = new PackOpener(taskRunner.getBrowserManager(), broadcastLog);
+
+    // Send response before starting
+    res.json({ success: true, message: 'Starting pack opener...' });
+
+    // Run pack opener asynchronously
+    const result = await packOpener.openAllPacks();
+    broadcastLog(`Pack opener finished: ${result.opened} packs opened, ${result.cardsStored} cards stored`, 'success');
+    packOpener = null;
+
+  } catch (error) {
+    packOpener = null;
+    broadcastLog(`Pack opener error: ${error}`, 'error');
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Stop pack opener
+app.post('/api/packs/stop', (req, res) => {
+  try {
+    if (packOpener) {
+      packOpener.stop();
     }
     res.json({ success: true, message: 'Stop signal sent' });
   } catch (error) {

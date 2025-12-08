@@ -4,7 +4,7 @@
       "id": "daily-bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Bronze Upgrade",
-      "repeatCount": 1,
+      "repeatCount": 2,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
@@ -32,7 +32,7 @@
       "category": "Upgrades",
       "cardTitle": "Daily Silver Upgrade",
       "repeatCount": 3,
-      "enabled": true,
+      "enabled": false,
       "taskType": "daily",
       "squadBuilderFilters": {
         "quality": "Silver",
@@ -47,7 +47,7 @@
       "category": "Upgrades",
       "cardTitle": "Daily Rare Gold Upgrade",
       "repeatCount": 3,
-      "enabled": true,
+      "enabled": false,
       "taskType": "daily",
       "squadBuilderFilters": {
         "quality": "Gold",
@@ -61,8 +61,8 @@
       "id": "bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Bronze Upgrade",
-      "repeatCount": 3,
-      "enabled": true,
+      "repeatCount": 2,
+      "enabled": false,
       "taskType": "optional",
       "squadBuilderFilters": {
         "quality": "Bronze",
@@ -89,7 +89,7 @@
       "id": "silver-upgrade-3x",
       "category": "Upgrades",
       "cardTitle": "Silver Upgrade",
-      "repeatCount": 3,
+      "repeatCount": 2,
       "enabled": false,
       "taskType": "optional",
       "squadBuilderFilters": {
@@ -132,6 +132,29 @@
         "silverCards": {
           "count": 8,
           "quality": "Bronze",
+          "rarity": "Common",
+          "isPositionDefined": false
+        }
+      },
+      "priority": 50
+    },
+    {
+      "id": "78-player-pick",
+      "category": "Upgrades",
+      "cardTitle": "78+ Player Pick",
+      "repeatCount": 1,
+      "enabled": true,
+      "taskType": "complex",
+      "complexConfig": {
+        "bronzeCards": {
+          "count": 3,
+          "quality": "Gold",
+          "rarity": "Rare",
+          "isPositionDefined": false
+        },
+        "silverCards": {
+          "count": 4,
+          "quality": "Gold",
           "rarity": "Common",
           "isPositionDefined": false
         }

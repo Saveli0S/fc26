@@ -112,6 +112,16 @@ export const api = {
       method: 'POST',
     }),
 
+  // Packs
+  openPacks: () =>
+    fetchApi<{ success: boolean; message: string }>('/packs/open', {
+      method: 'POST',
+    }),
+  stopPackOpener: () =>
+    fetchApi<{ success: boolean; message: string }>('/packs/stop', {
+      method: 'POST',
+    }),
+
   // Scheduler
   getSchedules: () => fetchApi<ScheduleInfo[]>('/scheduler/schedules'),
   startScheduler: () =>

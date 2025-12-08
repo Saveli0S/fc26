@@ -75,6 +75,9 @@ function App() {
 	const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null);
 	const [syncingInventory, setSyncingInventory] = useState(false);
 
+	// Pack opener state
+	const [openingPacks, setOpeningPacks] = useState(false);
+
 	// Tab state
 	const [activeTab, setActiveTab] = useState<'automation' | 'analytics'>('automation');
 
@@ -416,6 +419,27 @@ function App() {
 		}
 	};
 
+	// Pack opener handlers
+	const handleOpenPacks = async () => {
+		setError(null);
+		setOpeningPacks(true);
+		try {
+			await api.openPacks();
+			// Status will be updated via logs
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to start pack opener');
+			setOpeningPacks(false);
+		}
+	};
+
+	const handleStopPackOpener = async () => {
+		try {
+			await api.stopPackOpener();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : 'Failed to stop pack opener');
+		}
+	};
+
 	// Load inventory summary on mount and after sync
 	useEffect(() => {
 		loadInventorySummary();
@@ -430,6 +454,17 @@ function App() {
 		}
 		if (lastLog && (lastLog.message.includes('Sync failed') || lastLog.message.includes('Sync stopped'))) {
 			setSyncingInventory(false);
+		}
+	}, [logs]);
+
+	// Detect when pack opening completes by watching logs
+	useEffect(() => {
+		const lastLog = logs[logs.length - 1];
+		if (lastLog && lastLog.message.includes('Pack opening complete')) {
+			setOpeningPacks(false);
+		}
+		if (lastLog && (lastLog.message.includes('Pack opener error') || lastLog.message.includes('Stopping pack opener'))) {
+			setOpeningPacks(false);
 		}
 	}, [logs]);
 
@@ -564,93 +599,130 @@ function App() {
 				</div>
 
 				{/* Control Bar */}
-				<div className="mb-6 flex flex-wrap items-center gap-3 p-4 bg-[#131820] border border-ea-border rounded-lg">
-					<button
-						onClick={handleInitBrowser}
-						disabled={initializingBrowser || status.browserInitialized}
-						className={`px-4 py-2 rounded font-medium text-sm transition-all ${status.browserInitialized
-							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-							: 'bg-ea-blue/10 text-ea-blue border border-ea-blue/30 hover:bg-ea-blue/20'
-							}`}
-					>
-						{initializingBrowser ? 'Initializing...' : status.browserInitialized ? '✓ Browser Ready' : 'Initialize Browser'}
-					</button>
-
-					<button
-						onClick={handleLogin}
-						disabled={loading || !status.browserInitialized || !email || !password}
-						className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || !email || !password
-							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-							: 'bg-ea-purple/10 text-ea-purple border border-ea-purple/30 hover:bg-ea-purple/20'
-							}`}
-					>
-						Login to EA
-					</button>
-
-					{/* Inventory Buttons */}
-					<div className="h-6 w-px bg-ea-border" />
-
-					{syncingInventory ? (
+				<div className="mb-6 p-5 bg-[#131820] border border-ea-border rounded-lg space-y-3">
+					{/* Row 1: Browser Management */}
+					<div className="flex items-center gap-3">
+						<span className="text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Browser</span>
 						<button
-							onClick={handleStopSync}
-							className="px-4 py-2 rounded font-medium text-sm bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all"
-						>
-							⏹ Stop Sync
-						</button>
-					) : (
-						<button
-							onClick={handleSyncInventory}
-							disabled={!status.browserInitialized || status.isRunning}
-							className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || status.isRunning
+							onClick={handleInitBrowser}
+							disabled={initializingBrowser || status.browserInitialized}
+							className={`px-4 py-2 rounded font-medium text-sm transition-all ${status.browserInitialized
 								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-								: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20'
+								: 'bg-ea-blue/10 text-ea-blue border border-ea-blue/30 hover:bg-ea-blue/20'
 								}`}
 						>
-							🔄 Sync Cards
+							{initializingBrowser ? 'Initializing...' : status.browserInitialized ? '✓ Browser Ready' : 'Initialize Browser'}
 						</button>
-					)}
 
-					<button
-						onClick={() => setShowInventory(true)}
-						className="px-4 py-2 rounded font-medium text-sm bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-2"
-					>
-						📦 Inventory
-						{inventorySummary && inventorySummary.total > 0 && (
-							<span className="px-1.5 py-0.5 rounded bg-ea-green/20 text-ea-green text-xs">
-								{inventorySummary.total}
-							</span>
+						<button
+							onClick={handleLogin}
+							disabled={loading || !status.browserInitialized || !email || !password}
+							className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || !email || !password
+								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+								: 'bg-ea-purple/10 text-ea-purple border border-ea-purple/30 hover:bg-ea-purple/20'
+								}`}
+						>
+							Login to EA
+						</button>
+
+						<div className="flex-1" />
+
+						<button
+							onClick={handleCloseBrowser}
+							disabled={closingBrowser}
+							className="px-4 py-2 rounded font-medium text-sm transition-all bg-gray-800 text-gray-400 hover:bg-gray-700 disabled:opacity-50"
+						>
+							{closingBrowser ? 'Closing...' : 'Close Browser'}
+						</button>
+					</div>
+
+					{/* Divider */}
+					<div className="border-t border-ea-border/50" />
+
+					{/* Row 2: Inventory & Packs */}
+					<div className="flex items-center gap-3">
+						<span className="text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Inventory</span>
+						{syncingInventory ? (
+							<button
+								onClick={handleStopSync}
+								className="px-4 py-2 rounded font-medium text-sm bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all"
+							>
+								⏹ Stop Sync
+							</button>
+						) : (
+							<button
+								onClick={handleSyncInventory}
+								disabled={!status.browserInitialized || status.isRunning}
+								className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || status.isRunning
+									? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+									: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20'
+									}`}
+							>
+								🔄 Sync Cards
+							</button>
 						)}
-					</button>
 
-					<div className="flex-1" />
-
-					{status.isRunning ? (
 						<button
-							onClick={handleStop}
-							className="px-4 py-2 rounded font-medium text-sm bg-ea-red/10 text-ea-red border border-ea-red/30 hover:bg-ea-red/20 transition-all"
+							onClick={() => setShowInventory(true)}
+							className="px-4 py-2 rounded font-medium text-sm bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all flex items-center gap-2"
 						>
-							⏹ Stop
+							📦 Inventory
+							{inventorySummary && inventorySummary.total > 0 && (
+								<span className="px-1.5 py-0.5 rounded bg-ea-green/20 text-ea-green text-xs">
+									{inventorySummary.total}
+								</span>
+							)}
 						</button>
-					) : (
-						<button
-							onClick={handleRunAll}
-							disabled={!status.browserInitialized}
-							className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized
-								? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-								: 'bg-ea-green text-black hover:bg-ea-green/90 animate-pulse-glow'
-								}`}
-						>
-							▶ Run All Tasks
-						</button>
-					)}
 
-					<button
-						onClick={handleCloseBrowser}
-						disabled={closingBrowser}
-						className="px-4 py-2 rounded font-medium text-sm transition-all bg-gray-800 text-gray-400 hover:bg-gray-700 disabled:opacity-50"
-					>
-						{closingBrowser ? 'Closing...' : 'Close Browser'}
-					</button>
+						<div className="h-6 w-px bg-ea-border/50 mx-1" />
+
+						{openingPacks ? (
+							<button
+								onClick={handleStopPackOpener}
+								className="px-4 py-2 rounded font-medium text-sm bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all"
+							>
+								⏹ Stop Packs
+							</button>
+						) : (
+							<button
+								onClick={handleOpenPacks}
+								disabled={!status.browserInitialized || status.isRunning || syncingInventory}
+								className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized || status.isRunning || syncingInventory
+									? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+									: 'bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20'
+									}`}
+							>
+								🎁 Open Packs
+							</button>
+						)}
+					</div>
+
+					{/* Divider */}
+					<div className="border-t border-ea-border/50" />
+
+					{/* Row 3: Task Execution */}
+					<div className="flex items-center gap-3">
+						<span className="text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Tasks</span>
+						{status.isRunning ? (
+							<button
+								onClick={handleStop}
+								className="px-4 py-2 rounded font-medium text-sm bg-ea-red/10 text-ea-red border border-ea-red/30 hover:bg-ea-red/20 transition-all"
+							>
+								⏹ Stop
+							</button>
+						) : (
+							<button
+								onClick={handleRunAll}
+								disabled={!status.browserInitialized}
+								className={`px-5 py-2.5 rounded font-bold text-sm transition-all ${!status.browserInitialized
+									? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+									: 'bg-ea-green text-black hover:bg-ea-green/90 animate-pulse-glow'
+									}`}
+							>
+								▶ Run All Tasks
+							</button>
+						)}
+					</div>
 				</div>
 
 				{/* Tab Navigation */}
