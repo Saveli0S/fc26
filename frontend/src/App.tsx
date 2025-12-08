@@ -57,6 +57,8 @@ function App() {
 	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const [taskResults, setTaskResults] = useState<Map<string, TaskResult>>(new Map());
 	const [loading, setLoading] = useState(false);
+	const [initializingBrowser, setInitializingBrowser] = useState(false);
+	const [closingBrowser, setClosingBrowser] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [showReport, setShowReport] = useState(false);
 	const runningAllTasks = useRef(false);
@@ -141,7 +143,7 @@ function App() {
 		});
 	}, [config]);
 
-	const { connected } = useWebSocket(handleLog, handleTaskStatus);
+	const { connected, reconnect } = useWebSocket(handleLog, handleTaskStatus);
 
 	// Load initial data
 	useEffect(() => {
@@ -169,7 +171,7 @@ function App() {
 	};
 
 	const handleInitBrowser = async () => {
-		setLoading(true);
+		setInitializingBrowser(true);
 		setError(null);
 		try {
 			await api.initBrowser();
@@ -177,7 +179,7 @@ function App() {
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Failed to initialize browser');
 		} finally {
-			setLoading(false);
+			setInitializingBrowser(false);
 		}
 	};
 
@@ -198,14 +200,17 @@ function App() {
 	};
 
 	const handleCloseBrowser = async () => {
-		setLoading(true);
+		setClosingBrowser(true);
 		try {
 			await api.closeBrowser();
 			await loadStatus();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Failed to close browser');
+			// Don't show error for close - it might fail if browser already closed
+			console.error('Close browser error:', err);
 		} finally {
-			setLoading(false);
+			setClosingBrowser(false);
+			// Reset status regardless
+			setStatus(prev => ({ ...prev, browserInitialized: false, isRunning: false }));
 		}
 	};
 
@@ -407,12 +412,20 @@ function App() {
 							{/* Connection Status */}
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-900 border border-ea-border">
 								<div
-									className={`w-2 h-2 rounded-full ${connected ? 'bg-ea-green' : 'bg-ea-red'
+									className={`w-2 h-2 rounded-full ${connected ? 'bg-ea-green' : 'bg-ea-red animate-pulse'
 										}`}
 								/>
 								<span className="text-xs text-gray-400">
 									{connected ? 'Connected' : 'Disconnected'}
 								</span>
+								{!connected && (
+									<button
+										onClick={reconnect}
+										className="text-xs text-ea-blue hover:text-ea-blue/80 ml-1"
+									>
+										Retry
+									</button>
+								)}
 							</div>
 						</div>
 					</div>
@@ -476,13 +489,13 @@ function App() {
 				<div className="mb-6 flex flex-wrap items-center gap-3 p-4 bg-[#131820] border border-ea-border rounded-lg">
 					<button
 						onClick={handleInitBrowser}
-						disabled={loading || status.browserInitialized}
+						disabled={initializingBrowser || status.browserInitialized}
 						className={`px-4 py-2 rounded font-medium text-sm transition-all ${status.browserInitialized
 							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
 							: 'bg-ea-blue/10 text-ea-blue border border-ea-blue/30 hover:bg-ea-blue/20'
 							}`}
 					>
-						{loading ? 'Loading...' : status.browserInitialized ? '✓ Browser Ready' : 'Initialize Browser'}
+						{initializingBrowser ? 'Initializing...' : status.browserInitialized ? '✓ Browser Ready' : 'Initialize Browser'}
 					</button>
 
 					<button
@@ -555,13 +568,10 @@ function App() {
 
 					<button
 						onClick={handleCloseBrowser}
-						disabled={loading || !status.browserInitialized}
-						className={`px-4 py-2 rounded font-medium text-sm transition-all ${!status.browserInitialized
-							? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-							: 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-							}`}
+						disabled={closingBrowser}
+						className="px-4 py-2 rounded font-medium text-sm transition-all bg-gray-800 text-gray-400 hover:bg-gray-700 disabled:opacity-50"
 					>
-						Close Browser
+						{closingBrowser ? 'Closing...' : 'Close Browser'}
 					</button>
 				</div>
 

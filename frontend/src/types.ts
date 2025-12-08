@@ -86,6 +86,11 @@ export interface ScheduleInfo {
   nextRun: string | null;
 }
 
+export interface HealthCheckResult {
+  healthy: boolean;
+  reason: string;
+}
+
 // Card Inventory
 export interface PlayerCard {
   id: string;

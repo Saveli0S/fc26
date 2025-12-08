@@ -8,6 +8,7 @@ import { loadConfig, Task, SquadBuilderRules, TaskType, SpeedProfile } from '../
 import { SpeedProfileType } from './delays.js';
 import { inventoryService } from '../services/inventory.js';
 import { getTaskQueue } from '../services/task-queue.js';
+import { RecoveryService } from './recovery.js';
 
 // ============================================================================
 // Types
@@ -32,6 +33,7 @@ export type TaskStatusCallback = (result: TaskResult) => void;
 const CONFIG = {
   TIMEOUTS: {
     TASK_REPEAT: 30000, // 30 seconds per repeat
+    HEALTH_CHECK: 5000, // 5 seconds
   },
   DELAYS: {
     AFTER_NAVIGATION: 1000,
@@ -41,6 +43,11 @@ const CONFIG = {
   SELECTORS: {
     CHALLENGE_ROW: '.ut-sbc-challenge-table-row-view, [class*="challenge-row"]',
     EMPTY_SLOT: 'div.ut-item-loading.empty, div.item.empty.droppable',
+  },
+  RETRY: {
+    MAX_ATTEMPTS: 3,
+    BASE_DELAY: 1000, // 1 second base for exponential backoff
+    MAX_RECOVERY_ATTEMPTS: 2, // How many times to try recovery per task
   },
 };
 
@@ -52,11 +59,13 @@ export class TaskRunner {
   private browserManager: BrowserManager;
   private authManager: AuthManager;
   private sbcNavigator: SBCNavigator;
+  private recoveryService: RecoveryService | null = null;
   private ui: UIHelper | null = null;
   private log: LogCallback;
   private onTaskStatus: TaskStatusCallback | null = null;
   private isRunning = false;
   private shouldStop = false;
+  private recoveryAttempts = 0;
 
   constructor(logCallback?: LogCallback, taskStatusCallback?: TaskStatusCallback) {
     this.log = logCallback || ((msg) => console.log(msg));
@@ -74,6 +83,7 @@ export class TaskRunner {
     this.log('Initializing task runner...');
     await this.browserManager.initialize();
     this.ui = new UIHelper(this.browserManager, this.log);
+    this.recoveryService = new RecoveryService(this.browserManager, this.log);
     this.log('Task runner initialized', 'success');
   }
 
@@ -211,12 +221,32 @@ export class TaskRunner {
       return result;
     }
 
+    // Reset recovery state for this task
+    this.resetRecoveryState();
+
+    // Pre-task health check
+    if (!await this.quickHealthCheck()) {
+      this.log('Pre-task health check failed - attempting recovery...', 'warning');
+      await this.dismissModals();
+      if (!await this.quickHealthCheck()) {
+        result.status = 'failed';
+        result.error = 'Browser unresponsive - please restart';
+        this.broadcastTaskStatus(result);
+        return result;
+      }
+    }
+
     result.status = 'running';
     this.log(`Starting task: ${task.cardTitle}`, 'info');
+    this.broadcastTaskStatus(result);
 
     try {
-      // Navigate to the SBC card
-      await this.navigateToCard(task);
+      // Navigate to the SBC card with retry
+      await this.executeWithRetry(
+        () => this.navigateToCard(task),
+        CONFIG.RETRY.MAX_ATTEMPTS,
+        'navigate to card'
+      );
 
       // Route to appropriate workflow based on task type
       if (task.taskType === TaskType.Complex && task.complexConfig) {
@@ -229,6 +259,9 @@ export class TaskRunner {
       result.status = 'failed';
       result.error = error instanceof Error ? error.message : String(error);
       this.log(`Task failed: ${result.error}`, 'error');
+
+      // Try to dismiss any blocking modals before next task
+      await this.dismissModals();
     }
 
     this.broadcastTaskStatus(result);
@@ -574,5 +607,114 @@ export class TaskRunner {
 
   private async sleep(ms: number): Promise<void> {
     await this.browserManager.sleep(ms);
+  }
+
+  // ==========================================================================
+  // Retry and Recovery
+  // ==========================================================================
+
+  /**
+   * Execute a function with retry logic and exponential backoff
+   */
+  private async executeWithRetry<T>(
+    fn: () => Promise<T>,
+    maxRetries = CONFIG.RETRY.MAX_ATTEMPTS,
+    actionName = 'action'
+  ): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        this.throwIfStopped();
+        return await fn();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Don't retry if stopped by user
+        if (lastError.message === 'Stopped by user') {
+          throw lastError;
+        }
+
+        // Last attempt - try recovery before failing
+        if (attempt === maxRetries - 1) {
+          const recovered = await this.attemptRecoveryAndRetry(lastError, actionName);
+          if (recovered) {
+            // One more try after recovery
+            try {
+              return await fn();
+            } catch (retryError) {
+              lastError = retryError instanceof Error ? retryError : new Error(String(retryError));
+            }
+          }
+          throw lastError;
+        }
+
+        // Calculate exponential backoff delay
+        const delay = CONFIG.RETRY.BASE_DELAY * Math.pow(2, attempt);
+        this.log(`Retry ${attempt + 1}/${maxRetries} for "${actionName}" in ${delay}ms...`, 'warning');
+        await this.sleep(delay);
+      }
+    }
+
+    throw lastError || new Error(`${actionName} failed after ${maxRetries} attempts`);
+  }
+
+  /**
+   * Attempt automatic recovery from an error
+   */
+  private async attemptRecoveryAndRetry(error: Error, actionName: string): Promise<boolean> {
+    if (!this.recoveryService) return false;
+
+    // Don't exceed max recovery attempts per task
+    if (this.recoveryAttempts >= CONFIG.RETRY.MAX_RECOVERY_ATTEMPTS) {
+      this.log(`Max recovery attempts (${CONFIG.RETRY.MAX_RECOVERY_ATTEMPTS}) reached`, 'warning');
+      return false;
+    }
+
+    this.recoveryAttempts++;
+    const result = await this.recoveryService.attemptRecovery(error, actionName);
+
+    if (result.recovered) {
+      this.log(`Recovery successful (${result.strategy}) - will retry action`, 'success');
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Reset recovery state (call at start of each task)
+   */
+  private resetRecoveryState(): void {
+    this.recoveryAttempts = 0;
+    this.recoveryService?.resetAttempts();
+  }
+
+  /**
+   * Check browser health before running tasks
+   */
+  async checkHealth(): Promise<boolean> {
+    if (!this.recoveryService) return false;
+
+    const healthy = await this.recoveryService.isHealthy();
+    if (!healthy) {
+      this.log('Health check failed - browser may be unresponsive', 'error');
+    }
+    return healthy;
+  }
+
+  /**
+   * Quick health check - just checks if page responds
+   */
+  async quickHealthCheck(): Promise<boolean> {
+    if (!this.recoveryService) return false;
+    return await this.recoveryService.quickHealthCheck();
+  }
+
+  /**
+   * Proactively dismiss any visible modals
+   */
+  async dismissModals(): Promise<void> {
+    await this.recoveryService?.dismissModals();
   }
 }

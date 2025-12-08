@@ -153,8 +153,8 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps)
 										key={value}
 										onClick={() => handleRuleChange('speedProfile', value)}
 										className={`p-2 rounded border text-left transition-all ${isSelected
-												? 'border-ea-green bg-ea-green/10'
-												: 'border-ea-border bg-gray-900 hover:border-gray-600'
+											? 'border-ea-green bg-ea-green/10'
+											: 'border-ea-border bg-gray-900 hover:border-gray-600'
 											}`}
 									>
 										<div className={`text-sm font-medium ${isSelected ? info.color : 'text-gray-300'}`}>
@@ -163,9 +163,9 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask }: TaskConfigProps)
 										<div className="text-xs text-gray-500 mt-0.5">
 											{info.description}
 										</div>
-							</button>
-							);
-						})}
+									</button>
+								);
+							})}
 						</div>
 					</div>
 				</div>}

@@ -9,9 +9,18 @@ interface WebSocketMessage {
 type LogCallback = (entry: LogEntry) => void;
 type TaskStatusCallback = (result: TaskResult) => void;
 
+// Reconnection config
+const RECONNECT_CONFIG = {
+  BASE_DELAY: 1000, // 1 second
+  MAX_DELAY: 30000, // 30 seconds max
+  MAX_ATTEMPTS: 100, // Essentially infinite for long-running app
+};
+
 // Singleton WebSocket manager - single callback (replaces on HMR)
 let globalWs: WebSocket | null = null;
 let globalConnected = false;
+let reconnectAttempts = 0;
+let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 let onLogCallback: LogCallback | null = null;
 let onTaskStatusCallback: TaskStatusCallback | null = null;
 const listeners = new Set<() => void>();
@@ -27,46 +36,95 @@ function getWsUrl() {
   return `${protocol}//${host}:3001`;
 }
 
+function getReconnectDelay(): number {
+  // Exponential backoff: 1s, 2s, 4s, 8s... up to MAX_DELAY
+  const delay = Math.min(
+    RECONNECT_CONFIG.BASE_DELAY * Math.pow(2, reconnectAttempts),
+    RECONNECT_CONFIG.MAX_DELAY
+  );
+  return delay;
+}
+
+function scheduleReconnect() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+  }
+
+  if (reconnectAttempts >= RECONNECT_CONFIG.MAX_ATTEMPTS) {
+    console.error('WebSocket: Max reconnect attempts reached');
+    return;
+  }
+
+  const delay = getReconnectDelay();
+  console.log(`WebSocket: Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1})`);
+
+  reconnectTimeout = setTimeout(() => {
+    reconnectAttempts++;
+    connect();
+  }, delay);
+}
+
 function connect() {
   if (globalWs?.readyState === WebSocket.OPEN || globalWs?.readyState === WebSocket.CONNECTING) {
     return;
   }
 
-  const ws = new WebSocket(getWsUrl());
+  try {
+    const ws = new WebSocket(getWsUrl());
 
-  ws.onopen = () => {
-    console.log('WebSocket connected');
-    globalConnected = true;
-    notifyListeners();
-  };
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      globalConnected = true;
+      reconnectAttempts = 0; // Reset on successful connection
+      notifyListeners();
+    };
 
-  ws.onclose = () => {
-    console.log('WebSocket disconnected');
-    globalConnected = false;
-    globalWs = null;
-    notifyListeners();
-    // Reconnect after 3 seconds
-    setTimeout(connect, 3000);
-  };
+    ws.onclose = (event) => {
+      console.log(`WebSocket disconnected (code: ${event.code})`);
+      globalConnected = false;
+      globalWs = null;
+      notifyListeners();
 
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
+      // Auto-reconnect with backoff
+      scheduleReconnect();
+    };
 
-  ws.onmessage = (event) => {
-    try {
-      const message: WebSocketMessage = JSON.parse(event.data);
-      if (message.type === 'log' && onLogCallback) {
-        onLogCallback(message.data as LogEntry);
-      } else if (message.type === 'taskStatus' && onTaskStatusCallback) {
-        onTaskStatusCallback(message.data as TaskResult);
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      // onclose will handle reconnection
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        if (message.type === 'log' && onLogCallback) {
+          onLogCallback(message.data as LogEntry);
+        } else if (message.type === 'taskStatus' && onTaskStatusCallback) {
+          onTaskStatusCallback(message.data as TaskResult);
+        }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
       }
-    } catch (error) {
-      console.error('Failed to parse WebSocket message:', error);
-    }
-  };
+    };
 
-  globalWs = ws;
+    globalWs = ws;
+  } catch (error) {
+    console.error('WebSocket connection failed:', error);
+    scheduleReconnect();
+  }
+}
+
+function disconnect() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  if (globalWs) {
+    globalWs.close();
+    globalWs = null;
+  }
+  globalConnected = false;
+  reconnectAttempts = 0;
 }
 
 function subscribe(listener: () => void) {
@@ -76,11 +134,28 @@ function subscribe(listener: () => void) {
   }
   return () => {
     listeners.delete(listener);
+    // Don't disconnect when all listeners removed - keep connection alive
   };
 }
 
 function getSnapshot() {
   return globalConnected;
+}
+
+/**
+ * Force reconnection (can be called from UI if needed)
+ */
+export function forceReconnect() {
+  disconnect();
+  reconnectAttempts = 0;
+  connect();
+}
+
+/**
+ * Get current reconnect attempt count
+ */
+export function getReconnectAttempts() {
+  return reconnectAttempts;
 }
 
 export function useWebSocket(
@@ -109,5 +184,9 @@ export function useWebSocket(
     };
   }, []);
 
-  return { connected };
+  return {
+    connected,
+    reconnect: forceReconnect,
+    reconnectAttempts: getReconnectAttempts(),
+  };
 }

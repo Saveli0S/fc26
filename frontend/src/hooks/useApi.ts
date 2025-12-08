@@ -1,4 +1,4 @@
-import { Config, Task, AppStatus, InventorySummary, PlayerCard, ScheduleInfo } from '../types';
+import { Config, Task, AppStatus, InventorySummary, PlayerCard, ScheduleInfo, HealthCheckResult } from '../types';
 
 // In Electron (file://), use localhost explicitly
 const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
@@ -58,6 +58,11 @@ export const api = {
     }),
   closeBrowser: () =>
     fetchApi<{ success: boolean; message: string }>('/browser/close', {
+      method: 'POST',
+    }),
+  checkBrowserHealth: () => fetchApi<HealthCheckResult>('/browser/health'),
+  dismissModals: () =>
+    fetchApi<{ success: boolean; message: string }>('/browser/dismiss-modals', {
       method: 'POST',
     }),
 

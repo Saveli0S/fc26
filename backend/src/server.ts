@@ -306,6 +306,37 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Browser health check
+app.get('/api/browser/health', async (req, res) => {
+  try {
+    if (!taskRunner) {
+      return res.json({ healthy: false, reason: 'Browser not initialized' });
+    }
+
+    const healthy = await taskRunner.checkHealth();
+    res.json({
+      healthy,
+      reason: healthy ? 'Browser is responsive' : 'Browser may be unresponsive',
+    });
+  } catch (error) {
+    res.json({ healthy: false, reason: String(error) });
+  }
+});
+
+// Dismiss modals (recovery action)
+app.post('/api/browser/dismiss-modals', async (req, res) => {
+  try {
+    if (!taskRunner) {
+      return res.status(400).json({ error: 'Browser not initialized' });
+    }
+
+    await taskRunner.dismissModals();
+    res.json({ success: true, message: 'Modal dismiss attempted' });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 // ============================================================================
 // Scheduler API
 // ============================================================================
