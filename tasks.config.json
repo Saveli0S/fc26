@@ -4,7 +4,7 @@
       "id": "daily-bronze-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Bronze Upgrade",
-      "repeatCount": 2,
+      "repeatCount": 3,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
@@ -32,7 +32,7 @@
       "category": "Upgrades",
       "cardTitle": "Daily Silver Upgrade",
       "repeatCount": 3,
-      "enabled": false,
+      "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
         "quality": "Silver",
@@ -47,7 +47,7 @@
       "category": "Upgrades",
       "cardTitle": "Daily Rare Gold Upgrade",
       "repeatCount": 3,
-      "enabled": false,
+      "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
         "quality": "Gold",
@@ -188,7 +188,7 @@
       "id": "daily-common-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Common Gold Upgrade",
-      "repeatCount": 1,
+      "repeatCount": 3,
       "enabled": true,
       "taskType": "complex",
       "complexConfig": {
