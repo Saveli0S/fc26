@@ -1,6 +1,17 @@
 import { useState } from 'react';
-import { Task, SquadBuilderRules, SBCCategory, TaskType, SpeedProfile, SBCCategoryType, TaskTypeType, SpeedProfileType } from '../types';
-import { taskTemplates, TaskTemplate } from '../data/templates';
+import {
+	ComplexTaskConfig,
+	SquadBuilderFilters,
+	SquadBuilderRules,
+	SBCCategory,
+	SBCCategoryType,
+	Task,
+	TaskType,
+	TaskTypeType,
+	SpeedProfile,
+	SpeedProfileType,
+} from '@/types';
+import { taskTemplates, TaskTemplate } from '@/data/templates';
 
 // Speed profile display labels and descriptions
 const speedProfileInfo: Record<SpeedProfileType, { label: string; description: string; color: string }> = {
@@ -37,6 +48,9 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask, onApplyTemplate }:
 	const [isAddingTask, setIsAddingTask] = useState(false);
 	const [isRulesCollapsed, setIsRulesCollapsed] = useState(true); // Collapsed by default
 	const [isTemplatesCollapsed, setIsTemplatesCollapsed] = useState(false);
+	const [complexConfigText, setComplexConfigText] = useState<string>('');
+	const [squadBuilderFiltersText, setSquadBuilderFiltersText] = useState<string>('');
+	const [addTaskJsonError, setAddTaskJsonError] = useState<string | null>(null);
 	const [newTask, setNewTask] = useState<Partial<Task>>({
 		category: SBCCategory.Upgrades,
 		repeatCount: 1,
@@ -55,7 +69,38 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask, onApplyTemplate }:
 	};
 
 	const handleAddTask = () => {
+		setAddTaskJsonError(null);
 		if (!newTask.cardTitle) return;
+
+		const taskType = newTask.taskType || TaskType.Daily;
+		const trimmedComplexConfig = complexConfigText.trim();
+		const trimmedSquadBuilderFilters = squadBuilderFiltersText.trim();
+
+		let complexConfig: ComplexTaskConfig | undefined;
+		let squadBuilderFilters: SquadBuilderFilters | undefined;
+
+		if (taskType === TaskType.Complex) {
+			if (!trimmedComplexConfig) {
+				setAddTaskJsonError('complexConfig JSON is required for Complex tasks');
+				return;
+			}
+
+			try {
+				complexConfig = JSON.parse(trimmedComplexConfig) as ComplexTaskConfig;
+			} catch (err) {
+				setAddTaskJsonError(err instanceof Error ? err.message : 'Invalid complexConfig JSON');
+				return;
+			}
+		} else if (taskType === TaskType.Daily || taskType === TaskType.Optional) {
+			if (trimmedSquadBuilderFilters) {
+				try {
+					squadBuilderFilters = JSON.parse(trimmedSquadBuilderFilters) as SquadBuilderFilters;
+				} catch (err) {
+					setAddTaskJsonError(err instanceof Error ? err.message : 'Invalid squadBuilderFilters JSON');
+					return;
+				}
+			}
+		}
 
 		const task: Task = {
 			id: `task-${Date.now()}`,
@@ -63,11 +108,15 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask, onApplyTemplate }:
 			cardTitle: newTask.cardTitle,
 			repeatCount: newTask.repeatCount || 1,
 			enabled: true,
-			taskType: newTask.taskType || TaskType.Daily,
+			taskType,
+			...(complexConfig ? { complexConfig } : {}),
+			...(squadBuilderFilters ? { squadBuilderFilters } : {}),
 		};
 
 		onAddTask(task);
 		setNewTask({ category: SBCCategory.Upgrades, repeatCount: 1, enabled: true, taskType: TaskType.Daily });
+		setComplexConfigText('');
+		setSquadBuilderFiltersText('');
 		setIsAddingTask(false);
 	};
 
@@ -278,7 +327,10 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask, onApplyTemplate }:
 								<label className="block text-xs text-gray-500 mb-1">Task Type</label>
 								<select
 									value={newTask.taskType}
-									onChange={(e) => setNewTask({ ...newTask, taskType: e.target.value as TaskTypeType })}
+									onChange={(e) => {
+										setAddTaskJsonError(null);
+										setNewTask({ ...newTask, taskType: e.target.value as TaskTypeType });
+									}}
 									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green"
 								>
 									<option value={TaskType.Daily}>Daily</option>
@@ -299,6 +351,50 @@ export function TaskConfig({ rules, onUpdateRules, onAddTask, onApplyTemplate }:
 								/>
 							</div>
 						</div>
+
+						{newTask.taskType === TaskType.Complex && (
+							<div>
+								<label className="block text-xs text-gray-500 mb-1">complexConfig (JSON)</label>
+								<textarea
+									value={complexConfigText}
+									onChange={(e) => {
+										setAddTaskJsonError(null);
+										setComplexConfigText(e.target.value);
+									}}
+									rows={7}
+									placeholder={`{\n  "bronzeCards": { "count": 11, "quality": "Bronze", "rarity": "Common", "isPositionDefined": true }\n}`}
+									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green font-mono"
+								/>
+								<div className="text-xs text-gray-600 mt-1">
+									Only used when Task Type = <span className="text-gray-400">Complex</span>
+								</div>
+							</div>
+						)}
+
+						{(newTask.taskType === TaskType.Daily || newTask.taskType === TaskType.Optional) && (
+							<div>
+								<label className="block text-xs text-gray-500 mb-1">squadBuilderFilters (JSON)</label>
+								<textarea
+									value={squadBuilderFiltersText}
+									onChange={(e) => {
+										setAddTaskJsonError(null);
+										setSquadBuilderFiltersText(e.target.value);
+									}}
+									rows={5}
+									placeholder={`{\n  "quality": "Any",\n  "rarity": "Any",\n  "ignorePosition": true,\n  "isRarityRequired": false\n}`}
+									className="w-full bg-gray-900 border border-ea-border rounded px-3 py-2 text-sm text-gray-300 focus:outline-none focus:border-ea-green font-mono"
+								/>
+								<div className="text-xs text-gray-600 mt-1">
+									Only used when Task Type = <span className="text-gray-400">Daily/Optional</span>
+								</div>
+							</div>
+						)}
+
+						{addTaskJsonError && (
+							<div className="text-sm text-red-400 bg-red-950/30 border border-red-900/60 rounded px-3 py-2">
+								{addTaskJsonError}
+							</div>
+						)}
 
 						<button
 							onClick={handleAddTask}

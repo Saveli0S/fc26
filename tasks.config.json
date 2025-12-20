@@ -46,7 +46,7 @@
       "id": "daily-rare-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Rare Gold Upgrade",
-      "repeatCount": 3,
+      "repeatCount": 5,
       "enabled": true,
       "taskType": "daily",
       "squadBuilderFilters": {
@@ -143,7 +143,7 @@
       "category": "Upgrades",
       "cardTitle": "78+ Player Pick",
       "repeatCount": 1,
-      "enabled": true,
+      "enabled": false,
       "taskType": "complex",
       "complexConfig": {
         "bronzeCards": {
@@ -188,7 +188,7 @@
       "id": "daily-common-gold-upgrade",
       "category": "Upgrades",
       "cardTitle": "Daily Common Gold Upgrade",
-      "repeatCount": 3,
+      "repeatCount": 5,
       "enabled": true,
       "taskType": "complex",
       "complexConfig": {

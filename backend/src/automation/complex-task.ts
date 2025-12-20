@@ -564,7 +564,10 @@ export class ComplexTaskHandler {
 
     // Set Quality
     this.log(`  Setting Quality = "${requirement.quality}"...`);
-    await this.ui.setInlineDropdown(CONFIG.FILTERS.QUALITY, requirement.quality);
+    const qualityOk = await this.ui.setInlineDropdown(CONFIG.FILTERS.QUALITY, requirement.quality);
+    if (!qualityOk) {
+      throw new Error(`Could not set Quality dropdown to "${requirement.quality}"`);
+    }
     await this.sleep(DELAYS.SHORT);
 
     // Set Sort By
@@ -577,7 +580,10 @@ export class ComplexTaskHandler {
 
     // Set Rarity
     this.log(`  Setting Rarity = "${requirement.rarity}"...`);
-    await this.ui.setInlineDropdown(CONFIG.FILTERS.RARITY, requirement.rarity);
+    const rarityOk = await this.ui.setInlineDropdown(CONFIG.FILTERS.RARITY, requirement.rarity);
+    if (!rarityOk) {
+      throw new Error(`Could not set Rarity dropdown to "${requirement.rarity}"`);
+    }
     await this.sleep(DELAYS.MICRO);
 
     // Reset Position if needed

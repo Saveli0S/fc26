@@ -33,7 +33,8 @@ export type TaskStatusCallback = (result: TaskResult) => void;
 
 const CONFIG = {
   TIMEOUTS: {
-    TASK_REPEAT: 30000, // 30 seconds per repeat
+    TASK_REPEAT: 60000, // 60 seconds per repeat
+    COMPLEX_TASK_REPEAT: 240000, // 4 minutes per complex task repeat (manual card selection is slow)
     HEALTH_CHECK: 5000, // 5 seconds
   },
   DELAYS: {
@@ -212,8 +213,10 @@ export class TaskRunner {
 
   stop(): void {
     this.shouldStop = true;
-    this.log('⏹ STOP signal sent - stopping after current action...', 'warning');
-    setTimeout(() => { this.isRunning = false; }, 500);
+    this.log('⏹ STOP signal sent - cancelling current actions...', 'warning');
+    // Hard-cancel any in-flight Playwright awaits by resetting the page.
+    // Fire-and-forget: server stop endpoint is sync.
+    void this.browserManager.abortCurrentPage('user stop');
   }
 
   getIsRunning(): boolean {
@@ -277,12 +280,16 @@ export class TaskRunner {
       }
 
     } catch (error) {
-      result.status = 'failed';
-      result.error = error instanceof Error ? error.message : String(error);
-      this.log(`Task failed: ${result.error}`, 'error');
+      if (this.shouldStop) {
+        this.setStoppedByUser(result);
+      } else {
+        result.status = 'failed';
+        result.error = error instanceof Error ? error.message : String(error);
+        this.log(`Task failed: ${result.error}`, 'error');
+      }
 
       // Try to dismiss any blocking modals before next task
-      await this.dismissModals();
+      await this.dismissModals().catch(() => undefined);
     }
 
     // Record task execution in analytics
@@ -313,28 +320,67 @@ export class TaskRunner {
   private async runComplexTask(task: Task, result: TaskResult): Promise<void> {
     this.log('=== Complex Task Workflow ===', 'info');
 
-    // Enter squad view
-    await this.enterSquadView();
+    // Get repeat count (config-driven for complex tasks; daily tasks may be overridden by page count)
+    const repeatCount = await this.getRepeatCount(task, result);
+    if (repeatCount === 0) return; // Task skipped
 
-    // Execute complex task handler
-    const handler = new ComplexTaskHandler(this.browserManager, this.log);
-    const success = await handler.execute(task.complexConfig!);
+    result.totalRepeats = repeatCount;
+    this.broadcastTaskStatus(result);
 
-    if (success) {
-      result.status = 'completed';
-      result.completedRepeats = 1;
-      result.totalRepeats = 1;
-      this.log('Complex task completed', 'success');
+    // Execute repeats
+    for (let i = 0; i < repeatCount; i++) {
+      if (this.shouldStop) {
+        this.setStoppedByUser(result);
+        return;
+      }
 
-      // Remove used cards from inventory after successful exchange
-      const usedCardsSummary = handler.getUsedCardsSummary();
-      this.removeComplexTaskCardsFromInventory(usedCardsSummary);
+      this.log(`=== Repeat ${i + 1}/${repeatCount} ===`, 'info');
 
-      await this.sbcNavigator.clickClaimRewards();
-    } else {
-      result.status = 'failed';
-      result.error = 'Complex task failed - could not add all required cards';
-      this.log('Complex task failed', 'error');
+      try {
+        // For subsequent repeats, navigate back to the card (claim rewards may leave us on a modal/screen)
+        if (i > 0) {
+          await this.sbcNavigator.navigateToSBC();
+          await this.sleep(CONFIG.DELAYS.AFTER_NAVIGATION);
+          await this.navigateBackToCard(task);
+        }
+
+        // Enter squad view for the exchange
+        await this.enterSquadView();
+
+        // Execute complex task handler for this repeat
+        const handler = new ComplexTaskHandler(this.browserManager, this.log);
+        const success = await this.withTimeout(
+          handler.execute(task.complexConfig!),
+          CONFIG.TIMEOUTS.COMPLEX_TASK_REPEAT,
+          `Timeout: repeat ${i + 1} exceeded ${CONFIG.TIMEOUTS.COMPLEX_TASK_REPEAT / 1000}s`
+        );
+
+        if (!success) {
+          throw new Error('Complex task failed - could not add all required cards');
+        }
+
+        result.completedRepeats++;
+        this.log(`✓ Completed ${result.completedRepeats}/${repeatCount}`, 'success');
+        this.broadcastTaskStatus(result);
+
+        // Remove used cards from inventory after successful exchange
+        const usedCardsSummary = handler.getUsedCardsSummary();
+        this.removeComplexTaskCardsFromInventory(usedCardsSummary);
+
+        await this.sbcNavigator.clickClaimRewards();
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.log(`✗ Repeat ${i + 1} failed: ${errorMsg}`, 'error');
+        result.status = 'failed';
+        result.error = errorMsg;
+        return;
+      }
+    }
+
+    // Finalize result
+    result.status = result.completedRepeats === repeatCount ? 'completed' : 'failed';
+    if (result.status === 'failed' && !result.error) {
+      result.error = 'Not all repeats completed';
     }
   }
 

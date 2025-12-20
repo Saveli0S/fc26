@@ -74,6 +74,7 @@ export class BrowserManager {
   private page: Page | null = null;
   private log: LogCallback;
   private delayService: DelayService;
+  private isAborting = false;
 
   constructor(logCallback?: LogCallback, speedProfile?: SpeedProfileType) {
     this.log = logCallback || ((msg) => console.log(msg));
@@ -135,6 +136,35 @@ export class BrowserManager {
     }
 
     this.log('Browser closed - session preserved in profile', 'success');
+  }
+
+  /**
+   * Abort any in-flight Playwright actions by closing the current page and creating a fresh one.
+   * This is used for "Stop" so we can cancel immediately (Playwright actions are not cancellable otherwise).
+   */
+  async abortCurrentPage(reason = 'stop'): Promise<void> {
+    if (this.isAborting) return;
+    this.isAborting = true;
+
+    try {
+      this.log(`Aborting current browser page (${reason})...`, 'warning');
+
+      const existingPage = this.page;
+      this.page = null;
+
+      // Closing the page forces any pending locators/clicks/waits to reject immediately.
+      if (existingPage) {
+        await existingPage.close({ runBeforeUnload: false }).catch(() => undefined);
+      }
+
+      if (this.context) {
+        this.page = await this.getOrCreatePage();
+        await this.injectStealthScripts();
+        this.log('Browser page reset', 'success');
+      }
+    } finally {
+      this.isAborting = false;
+    }
   }
 
   // ==========================================================================

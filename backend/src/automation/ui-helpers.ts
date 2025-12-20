@@ -389,29 +389,82 @@ export class UIHelper {
       return false;
     }
 
-    // Click to open dropdown
     const dropdownRow = targetDropdown.locator(EA_SELECTORS.DROPDOWN_ROW).first();
-    await dropdownRow.click({ force: true });
-    await this.sleep(DELAYS.MEDIUM);
+    const resetBtn = targetDropdown.locator('button.flat.ut-search-filter-control--row-button, button.flat').first();
 
-    // Get all options and find by TEXT match (not by index!)
-    const options = targetDropdown.locator(EA_SELECTORS.DROPDOWN_OPTIONS);
-    const optionCount = await options.count();
+    // If already selected, no-op. If selected to something else, try resetting first (EA UI sometimes breaks otherwise).
+    const currentRowText = (await dropdownRow.textContent().catch(() => '') || '').trim().toLowerCase();
+    if (currentRowText && currentRowText.includes(valueLower)) {
+      this.log(`  [DROPDOWN] Already set to "${value}"`, 'info');
+      return true;
+    }
+
+    const resetVisible = await resetBtn.isVisible({ timeout: TIMEOUTS.INSTANT }).catch(() => false);
+    if (resetVisible) {
+      this.log('  [DROPDOWN] Reset button visible, clearing current selection...', 'info');
+      await resetBtn.click({ force: true }).catch(() => undefined);
+      await this.sleep(DELAYS.MICRO);
+    }
+
+    // Click to open dropdown (retry because EA sometimes renders options in a portal outside the dropdown node)
+    const options = this.page.locator(EA_SELECTORS.DROPDOWN_OPTIONS);
+    const altOptions = this.page.locator('[role="listbox"] [role="option"], li[role="option"], li[class*="option"]');
+
+    await dropdownRow.scrollIntoViewIfNeeded().catch(() => undefined);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await dropdownRow.click({ force: true });
+      await this.sleep(DELAYS.SHORT);
+
+      const appeared = await Promise.race([
+        options.first().waitFor({ state: 'visible', timeout: 2500 }).then(() => true).catch(() => false),
+        altOptions.first().waitFor({ state: 'visible', timeout: 2500 }).then(() => true).catch(() => false),
+      ]);
+
+      if (appeared) break;
+
+      // Close and retry
+      await this.page.keyboard.press('Escape').catch(() => undefined);
+      await this.sleep(DELAYS.MICRO);
+    }
 
     // Log all available options with their indices for debugging
-    this.log(`  [DROPDOWN] Found ${optionCount} options:`);
+    const optionCount = await options.count();
+    const altOptionCount = await altOptions.count();
+    this.log(`  [DROPDOWN] Found ${optionCount} options (inline) / ${altOptionCount} options (alt):`);
     const availableOptions: { index: number; text: string }[] = [];
-    for (let i = 0; i < optionCount; i++) {
-      const text = (await options.nth(i).textContent().catch(() => '') || '').trim();
+    const optionLocatorToUse = optionCount > 0 ? options : altOptions;
+    const totalToScan = optionCount > 0 ? optionCount : altOptionCount;
+
+    for (let i = 0; i < totalToScan; i++) {
+      const opt = optionLocatorToUse.nth(i);
+      const isVisible = await opt.isVisible({ timeout: TIMEOUTS.INSTANT }).catch(() => false);
+      if (!isVisible) continue;
+
+      const text = (await opt.textContent().catch(() => '') || '').trim();
+      if (!text) continue;
+
       availableOptions.push({ index: i, text });
       this.log(`    [${i}] "${text}"`);
+    }
+
+    if (availableOptions.length === 0) {
+      // Targeted debug (cheap counts) for the "Found 0 options" case
+      const ulCount = await this.page.locator('ul.inline-list').count().catch(() => 0);
+      const liCount = await this.page.locator('ul.inline-list li').count().catch(() => 0);
+      const roleOptionCount = await this.page.locator('[role="option"]').count().catch(() => 0);
+      const roleListboxCount = await this.page.locator('[role="listbox"]').count().catch(() => 0);
+      const rowText = (await dropdownRow.textContent().catch(() => '') || '').trim();
+      this.log(
+        `  [DROPDOWN] Debug: ul.inline-list=${ulCount}, ul.inline-list li=${liCount}, role=listbox=${roleListboxCount}, role=option=${roleOptionCount}, rowText="${rowText}"`,
+        'warning'
+      );
     }
 
     // Find and click option by EXACT TEXT VALUE match (case-insensitive)
     for (const opt of availableOptions) {
       if (opt.text.toLowerCase() === valueLower) {
         this.log(`  [DROPDOWN] EXACT MATCH: Clicking option [${opt.index}] "${opt.text}"`, 'success');
-        await options.nth(opt.index).click({ force: true });
+        await optionLocatorToUse.nth(opt.index).click({ force: true });
         await this.sleep(DELAYS.SHORT);
 
         // Verify what was selected
@@ -426,7 +479,7 @@ export class UIHelper {
       const textLower = opt.text.toLowerCase();
       if (textLower.includes(valueLower) || valueLower.includes(textLower)) {
         this.log(`  [DROPDOWN] PARTIAL MATCH: Clicking option [${opt.index}] "${opt.text}" for requested "${value}"`, 'warning');
-        await options.nth(opt.index).click({ force: true });
+        await optionLocatorToUse.nth(opt.index).click({ force: true });
         await this.sleep(DELAYS.SHORT);
 
         // Verify what was selected

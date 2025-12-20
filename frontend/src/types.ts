@@ -39,6 +39,19 @@ export interface SquadBuilderFilters {
   isRarityRequired?: boolean;
 }
 
+export interface CardRequirement {
+  count: number;
+  quality: 'Bronze' | 'Silver' | 'Gold';
+  rarity: 'Common' | 'Rare';
+  isPositionDefined?: boolean;
+}
+
+export interface ComplexTaskConfig {
+  bronzeCards?: CardRequirement;
+  silverCards?: CardRequirement;
+  goldCards?: CardRequirement;
+}
+
 export interface Task {
   id: string;
   category: SBCCategoryType;
@@ -50,6 +63,8 @@ export interface Task {
   schedule?: TaskSchedule;
   priority?: number; // 0-100, higher = runs first
   dependsOn?: string[]; // Task IDs this depends on
+  // Complex task configuration
+  complexConfig?: ComplexTaskConfig;
   // Squad builder filters
   squadBuilderFilters?: SquadBuilderFilters;
 }
